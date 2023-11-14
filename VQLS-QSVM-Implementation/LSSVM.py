@@ -17,11 +17,11 @@ def kernelMatrix(X, Y, kernelFunction: callable):
 
 
 def createTopMatrix(N):
-    matrix_top = np.zeros((N + 1, N + 1))
-    matrix_top[0, 0] = 0
-    matrix_top[0, 1:] = 1
-    matrix_top[1:, 0] = 1
-    return matrix_top
+    matrix = np.zeros((N + 1, N + 1))
+    matrix[0, 0] = 0
+    matrix[0, 1:] = 1
+    matrix[1:, 0] = 1
+    return matrix
 
 
 def createBottomMatrix(X, gamma, kernelFunction: callable):
@@ -32,14 +32,14 @@ def createBottomMatrix(X, gamma, kernelFunction: callable):
 def lssvmMatrix(X, gamma, kernel: str = "linearKernel"):
     if kernel == "linearKernel":
         kernelFunction = linearKernel
-    matrix_top = createTopMatrix(X.shape[0])
-    matrix_bottom = createBottomMatrix(X, gamma, kernelFunction)
-    for i in range(matrix_top.shape[0]):
-        for j in range(matrix_top.shape[1]):
+    matrixTop = createTopMatrix(X.shape[0])
+    matrixBottom = createBottomMatrix(X, gamma, kernelFunction)
+    for i in range(matrixTop.shape[0]):
+        for j in range(matrixTop.shape[1]):
             if i == 0 or j == 0:
                 continue
-            matrix_top[i, j] = matrix_bottom[i - 1, j - 1]
-    return matrix_top
+            matrixTop[i, j] = matrixBottom[i - 1, j - 1]
+    return matrixTop
 
 
 def weightsAndBiasVector(weights, bias):
