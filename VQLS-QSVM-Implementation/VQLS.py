@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from math import ceil
+from qiskit.circuit import ParameterVector
+import time
+from typing import List
 
 costHistory = []
 
@@ -21,12 +24,12 @@ def plotCost():
 def convertMatrixIntoCircuit(
     circuit: QuantumCircuit,
     paulis: PauliList,
-    controlled=False,
-    auxiliaryQubit=0,
-    showBarriers=True,
+    controlled: bool = False,
+    auxiliaryQubit: int = 0,
+    showBarriers: bool = True,
 ):
-    qubitIndexList = []
-    qubits = circuit.num_qubits
+    qubitIndexList: List[int] = []
+    qubits: int = circuit.num_qubits
     for i in range(qubits):
         if controlled:
             if i != auxiliaryQubit:
@@ -36,7 +39,7 @@ def convertMatrixIntoCircuit(
 
     for p in range(len(paulis)):
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]
+            currentGate = paulis[p][i] # figure out type
             # currentGate = paulis[p][len(paulis[p])-1-i]
             if currentGate.x and currentGate.z == False:
                 if controlled:
@@ -56,13 +59,14 @@ def convertMatrixIntoCircuit(
         if showBarriers:
             circuit.barrier()
 
-def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> list:
-    coeffs = []
-    paulis = pauliOp.paulis
+def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
+    coeffs: List[float] = []
+    paulis: PauliList = pauliOp.paulis
     for p in range(len(paulis)):
-        containsIdentity = False
+        containsIdentity: bool = False
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][len(paulis[p]) - 1 - i]
+            currentGate = paulis[p][i] # figure out type
+            # currentGate = paulis[p][len(paulis[p]) - 1 - i]
             if currentGate.x == False and currentGate.z == False:
                 containsIdentity = True
         coeffs.append(pauliOp.coeffs[p])
@@ -73,7 +77,7 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> list:
 # VLQS part
 
 def applyFixedAnsatz(
-    circ: QuantumCircuit, qubits: list, parameters: list
+    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]]
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
@@ -96,9 +100,9 @@ def applyFixedAnsatz(
 def hadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
-    qubits: list,
+    qubits: List[int],
     auxiliaryIndex: int,
-    parameters: list,
+    parameters: List[List[float]],
 ):
     circ.h(auxiliaryIndex)
 
@@ -121,29 +125,29 @@ def hadamardTest(
     circ.h(auxiliaryIndex)
 
 def controlB(
-    circ: QuantumCircuit, auxiliaryIndex: int, qubits: list, values: list
+    circ: QuantumCircuit, auxiliaryIndex: int, qubits: List[int], values: List[float]
 ):
     custom = createB(values).to_gate().control()
     circ.append(custom, [auxiliaryIndex] + qubits)
 
-def createB(values: list) -> QuantumCircuit:
-    qubits = ceil(np.log2(len(values)))
+def createB(values: List[float]) -> QuantumCircuit:
+    qubits: int = ceil(np.log2(len(values)))
     if len(values) != 2**qubits:
         values = np.pad(values, (0, 2**qubits - len(values)), "constant")
     values = values / np.linalg.norm(values)
-    circ = QuantumCircuit(qubits)
+    circ: QuantumCircuit = QuantumCircuit(qubits)
     circ.prepare_state(values)
     return circ
 
-def getBArray(values: list) -> np.array:
-    qubits = ceil(np.log2(len(values)))
+def getBArray(values: List[float]) -> np.array:
+    qubits: int = ceil(np.log2(len(values)))
     if len(values) != 2**qubits:
         values = np.pad(values, (0, 2**qubits - len(values)), "constant")
     return np.array(values / np.linalg.norm(values))
 
 # Creates controlled anstaz for calculating |<b|psi>|^2 with a Hadamard test
 def controlFixedAnsatz(
-    circ: QuantumCircuit, qubits: list, parameters: list, auxiliaryIndex: int
+    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]], auxiliaryIndex: int
 ):
     for i in range(len(qubits)):
         circ.cry(parameters[0][i], auxiliaryIndex, qubits[i])
@@ -174,10 +178,10 @@ def controlFixedAnsatz(
 def specialHadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
-    qubits: list,
+    qubits: List[int],
     auxiliaryIndex: int,
-    parameters: list,
-    weights: list,
+    parameters: List[List[float]],
+    weights: List[float],
 ):
     circ.h(auxiliaryIndex)
 
@@ -214,7 +218,7 @@ def specialHadamardTest(
 # This is very exact, but is not realistic, as a real quantum device would have to sample the circuit many times to generate these probabilities (I'll discuss sampling later). 
 # In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented, 
 # and I will be optimizing it in an update to this tutorial in the near future.
-def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
+def calculateCostFunctionMatrixOld(parameters: list, args: list) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
     overallSum1 = 0
     overallSum2 = 0
@@ -281,6 +285,67 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
 
     return totalCost
 
+def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
+    print("Iteration:", len(costHistory) + 1, end="\r")
+    overallSum1 = 0
+    overallSum2 = 0
+    backend = Aer.get_backend("aer_simulator")
+
+    coefficientSet = args[0]
+    transpiledHadamardCircuits = args[1]
+    parametersHadamard = args[2]
+    transpiledSpecialHadamardCircuits = args[3]
+    parametersSpecialHadamard = args[4]
+
+    qcrs = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
+    qcrs1 = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    lenPaulis = len(qcrs1)
+
+    for i in range(lenPaulis):
+        for j in range(lenPaulis):
+            job = backend.run(qcrs[i*lenPaulis + j])
+            result = job.result()
+            outputstate = np.real(result.get_statevector(qcrs[i*lenPaulis + j], decimals=100))
+
+            m_sum = 0
+            for l in range(len(outputstate)):
+                if l % 2 == 1:
+                    n = outputstate[l] ** 2
+                    m_sum += n
+
+            multiply = coefficientSet[i] * coefficientSet[j]
+            overallSum1 += multiply * (1 - (2 * m_sum))
+
+    resultVectors = []
+    for i in range(lenPaulis):
+        job = backend.run(qcrs1[i])
+        result = job.result()
+        outputstate = np.real(result.get_statevector(qcrs1[i], decimals=100))
+        resultVectors.append(outputstate)
+
+    for i in range(lenPaulis):  # optimize it little bit more
+        for j in range(lenPaulis):
+            mult = 1
+            for extra in range(2):
+                if extra == 0:
+                    outputstate = resultVectors[i]
+                if extra == 1:
+                    outputstate = resultVectors[j]
+
+                m_sum = 0
+                for l in range(len(outputstate)):
+                    if l % 2 == 1:
+                        n = outputstate[l] ** 2
+                        m_sum += n
+                mult = mult * (1 - (2 * m_sum))
+
+            multiply = coefficientSet[i] * coefficientSet[j]
+            overallSum2 += multiply * mult
+
+    totalCost = 1 - float(overallSum2.real / overallSum1.real)
+    # print(totalCost)
+    costHistory.append(totalCost)
+    return totalCost
 
 # Now, we have found that this algorithm works **in theory**. 
 # I tried to run some simulations with a circuit that samples the circuit instead of calculating the probabilities numerically. 
@@ -290,7 +355,7 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
 # Luckily, there are other optimizers that are built for noisy functions, such as SPSA, but we won't be looking into that in this tutorial. 
 
 # Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
-def calculateCostFunctionQuantumSimulation(
+def calculateCostFunctionQuantumSimulationOld(
     parameters: list, args: list
 ) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
@@ -359,6 +424,71 @@ def calculateCostFunctionQuantumSimulation(
     costHistory.append(totalCost)
     return totalCost
 
+def calculateCostFunctionQuantumSimulation(
+    parameters: list, args: list
+) -> float:
+    print("Iteration:", len(costHistory) + 1, end="\r")
+
+    overallSum1 = 0
+    overallSum2 = 0
+    backend = Aer.get_backend("aer_simulator")
+
+    coefficientSet = args[0]
+    transpiledHadamardCircuits = args[1]
+    parametersHadamard = args[2]
+    transpiledSpecialHadamardCircuits = args[3]
+    parametersSpecialHadamard = args[4]
+    shots = args[5]
+
+    qcrs = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
+    qcrs1 = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    lenPaulis = len(qcrs1)
+
+    for i in range(lenPaulis):
+        for j in range(lenPaulis):
+            job = backend.run(qcrs[i*lenPaulis + j], shots=shots)
+            result = job.result()
+            outputstate = result.get_counts(qcrs[i*lenPaulis + j])
+
+            if "1" in outputstate.keys():
+                m_sum = float(outputstate["1"]) / shots
+            else:
+                m_sum = 0
+
+            multiply = coefficientSet[i] * coefficientSet[j]
+            overallSum1 += multiply * (1 - 2 * m_sum)
+
+    resultVectors = []
+    for i in range(lenPaulis):
+        job = backend.run(qcrs1[i], shots=shots)
+        result = job.result()
+        outputstate = result.get_counts(qcrs1[i])
+        resultVectors.append(outputstate)
+
+    for i in range(lenPaulis):
+        for j in range(lenPaulis):
+            mult = 1
+            for extra in range(2):
+                if extra == 0:
+                    outputstate = resultVectors[i]
+                if extra == 1:
+                    outputstate = resultVectors[j]
+
+                if "1" in outputstate.keys():
+                    m_sum = float(outputstate["1"]) / shots
+                else:
+                    m_sum = 0
+
+                mult = mult * (1 - 2 * m_sum)
+
+            multiply = coefficientSet[i] * coefficientSet[j]
+            overallSum2 += multiply * mult
+
+    totalCost = 1 - float(overallSum2.real / overallSum1.real)
+    costHistory.append(totalCost)
+    return totalCost
+
+
 # test and minimization functions here
 def ansatzTest(circ: QuantumCircuit, outF: list):
     applyFixedAnsatz(circ, [0, 1, 2], outF)
@@ -372,7 +502,7 @@ def ansatzTest(circ: QuantumCircuit, outF: list):
     result = job.result()
     return result.get_statevector(circ, decimals=10)
 
-def minimization(
+def minimizationOld(
     paulis: PauliList,
     coefficientSet: list,
     totalNeededQubits: int,
@@ -387,7 +517,7 @@ def minimization(
     x = x / np.linalg.norm(x)
     if quantumSimulation:
         out = minimize(
-            calculateCostFunctionQuantumSimulation,
+            calculateCostFunctionQuantumSimulationOld,
             x0=x,
             args=[paulis, coefficientSet, bVector, totalNeededQubits, shots],
             method=method,
@@ -395,7 +525,7 @@ def minimization(
         )
     else:
         out = minimize(
-            calculateCostFunctionMatrix,
+            calculateCostFunctionMatrixOld,
             x0=x,
             args=[paulis, coefficientSet, bVector, totalNeededQubits],
             method=method,
@@ -404,6 +534,132 @@ def minimization(
     print(out)
     return [out["x"][0:3], out["x"][3:6], out["x"][6:9]]
 
+def minimization(
+    paulis: PauliList,
+    coefficientSet: list,
+    totalNeededQubits: int,
+    bVector: list,
+    quantumSimulation: bool = True,
+    method: str = "COBYLA",
+    shots: int = 100000,
+) -> list:
+    global costHistory
+    costHistory = []
+    x = [float(random.randint(0, 3000)) for _ in range(0, 9)]
+    x = x / np.linalg.norm(x)
+    start = time.time()
+    (
+        transpiledHadamardCircuits,
+        parametersHadamard,
+        transpiledSpecialHadamardCircuits,
+        parametersSpecialHadamard,
+    ) = prepareCircuits(
+        paulis, bVector, totalNeededQubits, quantumSimulation, "aer_simulator"
+    )
+    end = time.time()
+    print("Time to prepare circuits:", end - start)
+    start = time.time()
+    if quantumSimulation:
+        out = minimize(
+            calculateCostFunctionQuantumSimulation,
+            x0=x,
+            args=[
+                coefficientSet,
+                transpiledHadamardCircuits,
+                parametersHadamard,
+                transpiledSpecialHadamardCircuits,
+                parametersSpecialHadamard,
+                shots,
+            ],
+            method=method,
+            options={"maxiter": 200},
+        )
+    else:
+        out = minimize(
+            calculateCostFunctionMatrix,
+            x0=x,
+            args=[
+                coefficientSet,
+                transpiledHadamardCircuits,
+                parametersHadamard,
+                transpiledSpecialHadamardCircuits,
+                parametersSpecialHadamard,
+            ],
+            method=method,
+            options={"maxiter": 200},
+        )
+
+    end = time.time()
+    print("Time to minimize:", end - start)
+    print(out)
+    return [out["x"][0:3], out["x"][3:6], out["x"][6:9]]
+
+
+def prepareCircuits(
+    paulis: PauliList,
+    bVector: List[float],
+    totalNeededQubits: int,
+    isQuantumSimulation: bool,
+    backendStr: str,
+) -> (list, ParameterVector, list, ParameterVector):
+    backend = Aer.get_backend(backendStr)
+    parametersHadamard: ParameterVector = ParameterVector("parametersHadarmard", 9)
+    parametersSpecialHadamard: ParameterVector = ParameterVector("parametersSpecialHadamard", 9)
+    parametersHadamardSplit = [
+        parametersHadamard[0:3],
+        parametersHadamard[3:6],
+        parametersHadamard[6:9],
+    ]
+    parametersSpecialHadamardSplit = [
+        parametersSpecialHadamard[0:3],
+        parametersSpecialHadamard[3:6],
+        parametersSpecialHadamard[6:9],
+    ]
+
+    hadamardCircuits: List[QuantumCircuit] = []
+    specialHadamardCircuits: List[QuantumCircuit] = []
+
+    for i in range(len(paulis)):
+        for j in range(len(paulis)):
+            if isQuantumSimulation:
+                circ = QuantumCircuit(totalNeededQubits, 1)
+            else:
+                circ = QuantumCircuit(totalNeededQubits)
+            hadamardTest(
+                circ, [paulis[i], paulis[j]], [1, 2, 3], 0, parametersHadamardSplit
+            )
+            if isQuantumSimulation:
+                circ.measure(0, 0)
+            else:
+                circ.save_statevector()
+            hadamardCircuits.append(circ)
+
+    transpiledHadamardCircuits = transpile(hadamardCircuits, backend=backend)
+
+    for i in range(len(paulis)):
+        if isQuantumSimulation:
+            circ = QuantumCircuit(totalNeededQubits, 1)
+        else:
+            circ = QuantumCircuit(totalNeededQubits)
+        specialHadamardTest(
+            circ, [paulis[i]], [1, 2, 3], 0, parametersSpecialHadamardSplit, bVector
+        )
+        if isQuantumSimulation:
+            circ.measure(0, 0)
+        else:
+            circ.save_statevector()
+        specialHadamardCircuits.append(circ)
+
+    transpiledSpecialHadamardCircuits = transpile(
+        specialHadamardCircuits, backend=backend
+    )
+
+    return (
+        transpiledHadamardCircuits,
+        parametersHadamard,
+        transpiledSpecialHadamardCircuits,
+        parametersSpecialHadamard,
+    )
 
 # from qiskit.circuit.library import EfficientSU2
 # from qiskit import QuantumCircuit
