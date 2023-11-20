@@ -63,7 +63,9 @@ class VQLSSVM:
     def predict(self, xTest, kernelFunction: callable = linearKernel) -> np.array:
         if xTest.shape[0] > self.xTrainSize:
             splitTest = list(self.chunks(xTest, self.xTrainSize))
-            predictions = [self.predict(xTestSubset, kernelFunction) for xTestSubset in splitTest]
+            predictions = [
+                self.predict(xTestSubset, kernelFunction) for xTestSubset in splitTest
+            ]
             predictions = np.array(list(chain.from_iterable(predictions)))
         elif xTest.shape[0] < self.xTrainSize:
             xTestCopy = xTest.copy()
@@ -82,7 +84,7 @@ class VQLSSVM:
     def accuracy(self, xTest, yTest):
         correct = 0
         predictions = self.predict(xTest)
-        predictions = [ self.assignClass(i) for i in predictions]
+        predictions = [self.assignClass(i) for i in predictions]
         for i in range(len(predictions)):
             if predictions[i] == yTest[i]:
                 correct += 1
@@ -95,7 +97,7 @@ class VQLSSVM:
 
     def plotCost(self):
         plotCost()
-    
+
     def assignClass(self, prediction):
         if prediction >= 0:
             return 1

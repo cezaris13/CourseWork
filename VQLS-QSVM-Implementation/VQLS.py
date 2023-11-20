@@ -14,8 +14,10 @@ from itertools import product
 
 costHistory = []
 
+
 def getApproximationValue(A: np.ndarray, b: np.array, o: np.array) -> float:
-    return ((b.dot(A.dot(o) / (np.linalg.norm(A.dot(o))))) ** 2).real 
+    return ((b.dot(A.dot(o) / (np.linalg.norm(A.dot(o))))) ** 2).real
+
 
 def plotCost():
     plt.style.use("seaborn-v0_8")
@@ -23,6 +25,7 @@ def plotCost():
     plt.ylabel("Cost function")
     plt.xlabel("Optimization steps")
     plt.show()
+
 
 def convertMatrixIntoCircuit(
     circuit: QuantumCircuit,
@@ -42,7 +45,7 @@ def convertMatrixIntoCircuit(
 
     for p in range(len(paulis)):
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][i] # figure out type
+            currentGate = paulis[p][i]  # figure out type
             # currentGate = paulis[p][len(paulis[p])-1-i]
             if currentGate.x and currentGate.z == False:
                 if controlled:
@@ -62,13 +65,14 @@ def convertMatrixIntoCircuit(
         if showBarriers:
             circuit.barrier()
 
+
 def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
     coeffs: List[float] = []
     paulis: PauliList = pauliOp.paulis
     for p in range(len(paulis)):
         containsIdentity: bool = False
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][i] # figure out type
+            currentGate = paulis[p][i]  # figure out type
             # currentGate = paulis[p][len(paulis[p]) - 1 - i]
             if currentGate.x == False and currentGate.z == False:
                 containsIdentity = True
@@ -77,7 +81,9 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
             coeffs.append(pauliOp.coeffs[p])
     return coeffs
 
+
 # VLQS part
+
 
 def applyFixedAnsatz(
     circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]]
@@ -98,6 +104,7 @@ def applyFixedAnsatz(
 
     for i in range(len(qubits)):
         circ.ry(parameters[2][i], qubits[i])
+
 
 # Creates the Hadamard test
 def hadamardTest(
@@ -127,11 +134,13 @@ def hadamardTest(
 
     circ.h(auxiliaryIndex)
 
+
 def controlB(
     circ: QuantumCircuit, auxiliaryIndex: int, qubits: List[int], values: List[float]
 ):
     custom = createB(values).to_gate().control()
     circ.append(custom, [auxiliaryIndex] + qubits)
+
 
 def createB(values: List[float]) -> QuantumCircuit:
     qubits: int = ceil(np.log2(len(values)))
@@ -142,15 +151,20 @@ def createB(values: List[float]) -> QuantumCircuit:
     circ.prepare_state(values)
     return circ
 
+
 def getBArray(values: List[float]) -> np.array:
     qubits: int = ceil(np.log2(len(values)))
     if len(values) != 2**qubits:
         values = np.pad(values, (0, 2**qubits - len(values)), "constant")
     return np.array(values / np.linalg.norm(values))
 
+
 # Creates controlled anstaz for calculating |<b|psi>|^2 with a Hadamard test
 def controlFixedAnsatz(
-    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]], auxiliaryIndex: int
+    circ: QuantumCircuit,
+    qubits: List[int],
+    parameters: List[List[float]],
+    auxiliaryIndex: int,
 ):
     for i in range(len(qubits)):
         circ.cry(parameters[0][i], auxiliaryIndex, qubits[i])
@@ -176,6 +190,7 @@ def controlFixedAnsatz(
 
     for i in range(len(qubits)):
         circ.cry(parameters[2][i], auxiliaryIndex, qubits[i])
+
 
 # Create the controlled Hadamard test, for calculating <psi|psi>
 def specialHadamardTest(
@@ -212,14 +227,16 @@ def specialHadamardTest(
 
     circ.h(auxiliaryIndex)
 
+
 # Now, we are ready to calculate the final cost function. This simply involves us taking the products of all combinations of the expectation outputs from the different circuits,
 # multiplying by their respective coefficients, and arranging into the cost function that we discussed previously!
 # Implements the entire cost function on the quantum circuit theoretically
 
-### This code may look long and daunting, but it isn't! In this simulation, 
-# I'm taking a numerical approach, where I'm calculating the amplitude squared of each state corresponding to a measurement of the auxiliary Hadamard test qubit in the $1$ state, then calculating P(0) - P(1)  = 1 - 2P(1) with that information. 
-# This is very exact, but is not realistic, as a real quantum device would have to sample the circuit many times to generate these probabilities (I'll discuss sampling later). 
-# In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented, 
+
+### This code may look long and daunting, but it isn't! In this simulation,
+# I'm taking a numerical approach, where I'm calculating the amplitude squared of each state corresponding to a measurement of the auxiliary Hadamard test qubit in the $1$ state, then calculating P(0) - P(1)  = 1 - 2P(1) with that information.
+# This is very exact, but is not realistic, as a real quantum device would have to sample the circuit many times to generate these probabilities (I'll discuss sampling later).
+# In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented,
 # and I will be optimizing it in an update to this tutorial in the near future.
 def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
@@ -233,15 +250,25 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     transpiledSpecialHadamardCircuits = args[3]
     parametersSpecialHadamard = args[4]
 
-    bindedHadamardGates = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
-    bindedSpecHadamardGates = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    bindedHadamardGates = [
+        i.bind_parameters({parametersHadamard: parameters})
+        for i in transpiledHadamardCircuits
+    ]
+    bindedSpecHadamardGates = [
+        i.bind_parameters({parametersSpecialHadamard: parameters})
+        for i in transpiledSpecialHadamardCircuits
+    ]
     lenPaulis = len(bindedSpecHadamardGates)
 
     for i in range(lenPaulis):
         for j in range(lenPaulis):
-            job = backend.run(bindedHadamardGates[i*lenPaulis + j])
+            job = backend.run(bindedHadamardGates[i * lenPaulis + j])
             result = job.result()
-            outputstate = np.real(result.get_statevector(bindedHadamardGates[i*lenPaulis + j], decimals=100))
+            outputstate = np.real(
+                result.get_statevector(
+                    bindedHadamardGates[i * lenPaulis + j], decimals=100
+                )
+            )
 
             m_sum = 0
             for l in range(len(outputstate)):
@@ -256,7 +283,9 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     for i in range(lenPaulis):
         job = backend.run(bindedSpecHadamardGates[i])
         result = job.result()
-        outputstate = np.real(result.get_statevector(bindedSpecHadamardGates[i], decimals=100))
+        outputstate = np.real(
+            result.get_statevector(bindedSpecHadamardGates[i], decimals=100)
+        )
         resultVectors.append(outputstate)
 
     for i in range(lenPaulis):  # optimize it little bit more
@@ -283,17 +312,17 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     costHistory.append(totalCost)
     return totalCost
 
-# Now, we have found that this algorithm works **in theory**. 
-# I tried to run some simulations with a circuit that samples the circuit instead of calculating the probabilities numerically. 
-#  Now, let's try to **sample** the quantum circuit, as a real quantum computer would do! 
-# For some reason, this simulation would only converge somewhat well for a ridiculously high number of "shots" (runs of the circuit, in order to calculate the probability distribution of outcomes). 
-# I think that this is mostly to do with limitations in the classical optimizer (COBYLA), due to the noisy nature of sampling a quantum circuit (a measurement with the same parameters won't always yield the same outcome). 
-# Luckily, there are other optimizers that are built for noisy functions, such as SPSA, but we won't be looking into that in this tutorial. 
+
+# Now, we have found that this algorithm works **in theory**.
+# I tried to run some simulations with a circuit that samples the circuit instead of calculating the probabilities numerically.
+#  Now, let's try to **sample** the quantum circuit, as a real quantum computer would do!
+# For some reason, this simulation would only converge somewhat well for a ridiculously high number of "shots" (runs of the circuit, in order to calculate the probability distribution of outcomes).
+# I think that this is mostly to do with limitations in the classical optimizer (COBYLA), due to the noisy nature of sampling a quantum circuit (a measurement with the same parameters won't always yield the same outcome).
+# Luckily, there are other optimizers that are built for noisy functions, such as SPSA, but we won't be looking into that in this tutorial.
+
 
 # Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
-def calculateCostFunctionQuantumSimulation(
-    parameters: list, args: list
-) -> float:
+def calculateCostFunctionQuantumSimulation(parameters: list, args: list) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
 
     overallSum1 = 0
@@ -308,8 +337,14 @@ def calculateCostFunctionQuantumSimulation(
     shots = args[5]
     exc = args[6]
 
-    bindedHadamardGates = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
-    bindedSpecHadamardGates = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    bindedHadamardGates = [
+        i.bind_parameters({parametersHadamard: parameters})
+        for i in transpiledHadamardCircuits
+    ]
+    bindedSpecHadamardGates = [
+        i.bind_parameters({parametersSpecialHadamard: parameters})
+        for i in transpiledSpecialHadamardCircuits
+    ]
     lenPaulis = len(bindedSpecHadamardGates)
 
     backend.set_options(executor=exc)
@@ -319,7 +354,7 @@ def calculateCostFunctionQuantumSimulation(
 
     for i in range(lenPaulis):
         for j in range(lenPaulis):
-            outputstate = results.get_counts(bindedHadamardGates[i*lenPaulis + j])
+            outputstate = results.get_counts(bindedHadamardGates[i * lenPaulis + j])
 
             if "1" in outputstate.keys():
                 m_sum = float(outputstate["1"]) / shots
@@ -329,7 +364,7 @@ def calculateCostFunctionQuantumSimulation(
             multiply = coefficientSet[i] * coefficientSet[j]
             overallSum1 += multiply * (1 - 2 * m_sum)
 
-    del results 
+    del results
     del bindedHadamardGates
 
     gc.collect()
@@ -378,6 +413,7 @@ def ansatzTest(circ: QuantumCircuit, outF: list):
     result = job.result()
     return result.get_statevector(circ, decimals=10)
 
+
 def minimization(
     paulis: PauliList,
     coefficientSet: list,
@@ -386,7 +422,7 @@ def minimization(
     quantumSimulation: bool = True,
     method: str = "COBYLA",
     shots: int = 100000,
-    iterations: int = 200
+    iterations: int = 200,
 ) -> list:
     global costHistory
     costHistory = []
@@ -416,7 +452,7 @@ def minimization(
                 transpiledSpecialHadamardCircuits,
                 parametersSpecialHadamard,
                 shots,
-                exc
+                exc,
             ],
             method=method,
             options={"maxiter": iterations},
@@ -451,7 +487,9 @@ def prepareCircuits(
 ) -> (list, ParameterVector, list, ParameterVector):
     backend = Aer.get_backend(backendStr)
     parametersHadamard: ParameterVector = ParameterVector("parametersHadarmard", 9)
-    parametersSpecialHadamard: ParameterVector = ParameterVector("parametersSpecialHadamard", 9)
+    parametersSpecialHadamard: ParameterVector = ParameterVector(
+        "parametersSpecialHadamard", 9
+    )
     parametersHadamardSplit = [
         parametersHadamard[0:3],
         parametersHadamard[3:6],
@@ -508,30 +546,38 @@ def prepareCircuits(
         parametersSpecialHadamard,
     )
 
+
 # Quantum normalized vector after ansatztest can have negative or positive values,
 # so we need to check all combinations of signs, which one returns the minimum difference between b and bEstimated
 # minimum difference between b and bEstimated is the sign combination we are looking for
 def bestMatchingSignsVector(A: np.ndarray, xEstimated: np.array, b: np.array) -> list:
     values = [-1, 1]
-    combos = list(product(values, repeat=len(xEstimated))) # generates all 8 bit combinations
+    combos = list(
+        product(values, repeat=len(xEstimated))
+    )  # generates all 8 bit combinations
     minDifference = 10000000
     minDifferenceValue = []
     for combo in combos:
-        vc = np.multiply(xEstimated, list(combo)) # multiply each element of vector with the corresponding element of combo
-        bEstimated = A.dot(vc) # calculate bEst
-        difference = np.linalg.norm(bEstimated - b) # calculate difference between b and bEstimated
+        vc = np.multiply(
+            xEstimated, list(combo)
+        )  # multiply each element of vector with the corresponding element of combo
+        bEstimated = A.dot(vc)  # calculate bEst
+        difference = np.linalg.norm(
+            bEstimated - b
+        )  # calculate difference between b and bEstimated
         if difference < minDifference:
             minDifference = difference
             minDifferenceValue = vc
     return minDifferenceValue
 
+
 # estimate norm of vector
 # once we got the sign combination, we can calculate the norm of the vector
-# norm = b.T * b / b.T * A * v 
+# norm = b.T * b / b.T * A * v
 # check this formula in the paper
-def estimateNorm(A: np.ndarray, estimatedX: np.array,b: np.array) -> (float, list):
+def estimateNorm(A: np.ndarray, estimatedX: np.array, b: np.array) -> (float, list):
     v = bestMatchingSignsVector(A, estimatedX, b)
     leftSide = b.T.dot(A.dot(v))
     rightSide = b.T.dot(b)
-    estimatedNorm = rightSide/leftSide
+    estimatedNorm = rightSide / leftSide
     return estimatedNorm, v
