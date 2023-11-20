@@ -8,6 +8,9 @@ from math import ceil
 from qiskit.circuit import ParameterVector
 import time
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
+import gc
+from itertools import product
 
 costHistory = []
 
@@ -218,73 +221,6 @@ def specialHadamardTest(
 # This is very exact, but is not realistic, as a real quantum device would have to sample the circuit many times to generate these probabilities (I'll discuss sampling later). 
 # In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented, 
 # and I will be optimizing it in an update to this tutorial in the near future.
-def calculateCostFunctionMatrixOld(parameters: list, args: list) -> float:
-    print("Iteration:", len(costHistory) + 1, end="\r")
-    overallSum1 = 0
-    overallSum2 = 0
-    parameters = [parameters[0:3], parameters[3:6], parameters[6:9]]
-    paulis = args[0]
-    coefficientSet = args[1]
-    bVector = args[2]
-    totalNumberOfQubits = args[3]
-    backend = Aer.get_backend("aer_simulator")
-
-    for i, pauliI in enumerate(paulis):
-        for j, pauliJ in enumerate(paulis):
-            circ = QuantumCircuit(totalNumberOfQubits, totalNumberOfQubits)
-            hadamardTest(circ, [pauliI, pauliJ], [1, 2, 3], 0, parameters)
-            circ.save_statevector()
-            t_circ = transpile(circ, backend)
-            job = backend.run(t_circ)
-
-            result = job.result()
-            outputstate = np.real(result.get_statevector(circ, decimals=100))
-            o = outputstate
-
-            m_sum = 0
-            for l in range(len(o)):
-                if l % 2 == 1:
-                    n = o[l] ** 2
-                    m_sum += n
-
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum1 += multiply * (1 - (2 * m_sum))
-
-    resultVectors = []
-    for i, pauliI in enumerate(paulis):
-        circ = QuantumCircuit(totalNumberOfQubits, totalNumberOfQubits)
-        specialHadamardTest(circ, [pauliI], [1, 2, 3], 0, parameters, bVector)
-        circ.save_statevector()
-        t_circ = transpile(circ, backend)
-        job = backend.run(t_circ)
-        result = job.result()
-        outputstate = np.real(result.get_statevector(circ, decimals=100))
-        resultVectors.append(outputstate)
-
-    for i in range(len(paulis)):  # optimize it little bit more
-        for j in range(len(paulis)):
-            mult = 1
-            for extra in range(2):
-                if extra == 0:
-                    o = resultVectors[i]
-                if extra == 1:
-                    o = resultVectors[j]
-
-                m_sum = 0
-                for l in range(len(o)):
-                    if l % 2 == 1:
-                        n = o[l] ** 2
-                        m_sum += n
-                mult = mult * (1 - (2 * m_sum))
-
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum2 += multiply * mult
-
-    totalCost = 1 - float(overallSum2.real / overallSum1.real)
-    costHistory.append(totalCost)
-
-    return totalCost
-
 def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
     overallSum1 = 0
@@ -297,15 +233,15 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     transpiledSpecialHadamardCircuits = args[3]
     parametersSpecialHadamard = args[4]
 
-    qcrs = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
-    qcrs1 = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
-    lenPaulis = len(qcrs1)
+    bindedHadamardGates = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
+    bindedSpecHadamardGates = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    lenPaulis = len(bindedSpecHadamardGates)
 
     for i in range(lenPaulis):
         for j in range(lenPaulis):
-            job = backend.run(qcrs[i*lenPaulis + j])
+            job = backend.run(bindedHadamardGates[i*lenPaulis + j])
             result = job.result()
-            outputstate = np.real(result.get_statevector(qcrs[i*lenPaulis + j], decimals=100))
+            outputstate = np.real(result.get_statevector(bindedHadamardGates[i*lenPaulis + j], decimals=100))
 
             m_sum = 0
             for l in range(len(outputstate)):
@@ -318,9 +254,9 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
 
     resultVectors = []
     for i in range(lenPaulis):
-        job = backend.run(qcrs1[i])
+        job = backend.run(bindedSpecHadamardGates[i])
         result = job.result()
-        outputstate = np.real(result.get_statevector(qcrs1[i], decimals=100))
+        outputstate = np.real(result.get_statevector(bindedSpecHadamardGates[i], decimals=100))
         resultVectors.append(outputstate)
 
     for i in range(lenPaulis):  # optimize it little bit more
@@ -355,75 +291,6 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
 # Luckily, there are other optimizers that are built for noisy functions, such as SPSA, but we won't be looking into that in this tutorial. 
 
 # Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
-def calculateCostFunctionQuantumSimulationOld(
-    parameters: list, args: list
-) -> float:
-    print("Iteration:", len(costHistory) + 1, end="\r")
-    overallSum1 = 0
-    overallSum2 = 0
-    parameters = [parameters[0:3], parameters[3:6], parameters[6:9]]
-    paulis = args[0]
-    coefficientSet = args[1]
-    bVector = args[2]
-    totalNumberOfQubits = args[3]
-    shots = args[4]
-
-    backend = Aer.get_backend("aer_simulator")
-
-    for i, pauliI in enumerate(paulis):
-        for j, pauliJ in enumerate(paulis):
-            circ = QuantumCircuit(totalNumberOfQubits, 1)
-            hadamardTest(circ, [pauliI, pauliJ], [1, 2, 3], 0, parameters)
-            circ.measure(0, 0)
-
-            t_circ = transpile(circ, backend)
-            job = backend.run(t_circ, shots=shots)
-
-            result = job.result()
-            outputstate = result.get_counts(circ)
-
-            if "1" in outputstate.keys():
-                m_sum = float(outputstate["1"]) / shots
-            else:
-                m_sum = 0
-
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum1 += multiply * (1 - 2 * m_sum)
-
-    resultVectors = []
-    for i, pauliI in enumerate(paulis):
-        circ = QuantumCircuit(totalNumberOfQubits, 1)
-        specialHadamardTest(circ, [pauliI], [1, 2, 3], 0, parameters, bVector)
-        circ.measure(0, 0)
-        t_circ = transpile(circ, backend)
-        job = backend.run(t_circ, shots=shots)
-        result = job.result()
-        outputstate = result.get_counts(circ)
-        resultVectors.append(outputstate)
-
-    for i in range(len(paulis)):
-        for j in range(len(paulis)):
-            mult = 1
-            for extra in range(2):
-                if extra == 0:
-                    outputstate = resultVectors[i]
-                if extra == 1:
-                    outputstate = resultVectors[j]
-
-                if "1" in outputstate.keys():
-                    m_sum = float(outputstate["1"]) / shots
-                else:
-                    m_sum = 0
-
-                mult = mult * (1 - 2 * m_sum)
-
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum2 += multiply * mult
-
-    totalCost = 1 - float(overallSum2.real / overallSum1.real)
-    costHistory.append(totalCost)
-    return totalCost
-
 def calculateCostFunctionQuantumSimulation(
     parameters: list, args: list
 ) -> float:
@@ -439,16 +306,20 @@ def calculateCostFunctionQuantumSimulation(
     transpiledSpecialHadamardCircuits = args[3]
     parametersSpecialHadamard = args[4]
     shots = args[5]
+    exc = args[6]
 
-    qcrs = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
-    qcrs1 = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
-    lenPaulis = len(qcrs1)
+    bindedHadamardGates = [i.bind_parameters({parametersHadamard: parameters}) for i in transpiledHadamardCircuits]
+    bindedSpecHadamardGates = [i.bind_parameters({parametersSpecialHadamard: parameters}) for i in transpiledSpecialHadamardCircuits]
+    lenPaulis = len(bindedSpecHadamardGates)
+
+    backend.set_options(executor=exc)
+    backend.set_options(max_job_size=1)
+
+    results = backend.run(bindedHadamardGates, shots=shots).result()
 
     for i in range(lenPaulis):
         for j in range(lenPaulis):
-            job = backend.run(qcrs[i*lenPaulis + j], shots=shots)
-            result = job.result()
-            outputstate = result.get_counts(qcrs[i*lenPaulis + j])
+            outputstate = results.get_counts(bindedHadamardGates[i*lenPaulis + j])
 
             if "1" in outputstate.keys():
                 m_sum = float(outputstate["1"]) / shots
@@ -458,21 +329,21 @@ def calculateCostFunctionQuantumSimulation(
             multiply = coefficientSet[i] * coefficientSet[j]
             overallSum1 += multiply * (1 - 2 * m_sum)
 
-    resultVectors = []
-    for i in range(lenPaulis):
-        job = backend.run(qcrs1[i], shots=shots)
-        result = job.result()
-        outputstate = result.get_counts(qcrs1[i])
-        resultVectors.append(outputstate)
+    del results 
+    del bindedHadamardGates
+
+    gc.collect()
+
+    results = backend.run(bindedSpecHadamardGates, shots=shots).result()
 
     for i in range(lenPaulis):
         for j in range(lenPaulis):
             mult = 1
             for extra in range(2):
                 if extra == 0:
-                    outputstate = resultVectors[i]
+                    outputstate = results.get_counts(bindedSpecHadamardGates[i])
                 if extra == 1:
-                    outputstate = resultVectors[j]
+                    outputstate = results.get_counts(bindedSpecHadamardGates[j])
 
                 if "1" in outputstate.keys():
                     m_sum = float(outputstate["1"]) / shots
@@ -483,6 +354,11 @@ def calculateCostFunctionQuantumSimulation(
 
             multiply = coefficientSet[i] * coefficientSet[j]
             overallSum2 += multiply * mult
+
+    del results
+    del bindedSpecHadamardGates
+
+    gc.collect()
 
     totalCost = 1 - float(overallSum2.real / overallSum1.real)
     costHistory.append(totalCost)
@@ -502,38 +378,6 @@ def ansatzTest(circ: QuantumCircuit, outF: list):
     result = job.result()
     return result.get_statevector(circ, decimals=10)
 
-def minimizationOld(
-    paulis: PauliList,
-    coefficientSet: list,
-    totalNeededQubits: int,
-    bVector: list,
-    quantumSimulation: bool = True,
-    method: str = "COBYLA",
-    shots = 100000
-) -> list:
-    global costHistory
-    costHistory = []
-    x = [float(random.randint(0, 3000)) for _ in range(0, 9)]
-    x = x / np.linalg.norm(x)
-    if quantumSimulation:
-        out = minimize(
-            calculateCostFunctionQuantumSimulationOld,
-            x0=x,
-            args=[paulis, coefficientSet, bVector, totalNeededQubits, shots],
-            method=method,
-            options={"maxiter": 200},
-        )
-    else:
-        out = minimize(
-            calculateCostFunctionMatrixOld,
-            x0=x,
-            args=[paulis, coefficientSet, bVector, totalNeededQubits],
-            method=method,
-            options={"maxiter": 200},
-        )
-    print(out)
-    return [out["x"][0:3], out["x"][3:6], out["x"][6:9]]
-
 def minimization(
     paulis: PauliList,
     coefficientSet: list,
@@ -542,6 +386,7 @@ def minimization(
     quantumSimulation: bool = True,
     method: str = "COBYLA",
     shots: int = 100000,
+    iterations: int = 200
 ) -> list:
     global costHistory
     costHistory = []
@@ -560,6 +405,7 @@ def minimization(
     print("Time to prepare circuits:", end - start)
     start = time.time()
     if quantumSimulation:
+        exc = ThreadPoolExecutor(max_workers=4)
         out = minimize(
             calculateCostFunctionQuantumSimulation,
             x0=x,
@@ -570,9 +416,10 @@ def minimization(
                 transpiledSpecialHadamardCircuits,
                 parametersSpecialHadamard,
                 shots,
+                exc
             ],
             method=method,
-            options={"maxiter": 200},
+            options={"maxiter": iterations},
         )
     else:
         out = minimize(
@@ -586,7 +433,7 @@ def minimization(
                 parametersSpecialHadamard,
             ],
             method=method,
-            options={"maxiter": 200},
+            options={"maxiter": iterations},
         )
 
     end = time.time()
@@ -661,73 +508,30 @@ def prepareCircuits(
         parametersSpecialHadamard,
     )
 
-# from qiskit.circuit.library import EfficientSU2
-# from qiskit import QuantumCircuit
-# qubits = 2
-# ansatz = EfficientSU2(qubits, su2_gates=['ry'], entanglement='circular', reps=qubits -1, insert_barriers=True)
-# qc = QuantumCircuit(qubits)  # create a circuit and append the RY variational form
-# qc.compose(ansatz, inplace=True)
-# #decompose whats inside
-# qc.decompose().draw(output="mpl")
-# # qc.draw(output="mpl")
+# Quantum normalized vector after ansatztest can have negative or positive values,
+# so we need to check all combinations of signs, which one returns the minimum difference between b and bEstimated
+# minimum difference between b and bEstimated is the sign combination we are looking for
+def bestMatchingSignsVector(A: np.ndarray, xEstimated: np.array, b: np.array) -> list:
+    values = [-1, 1]
+    combos = list(product(values, repeat=len(xEstimated))) # generates all 8 bit combinations
+    minDifference = 10000000
+    minDifferenceValue = []
+    for combo in combos:
+        vc = np.multiply(xEstimated, list(combo)) # multiply each element of vector with the corresponding element of combo
+        bEstimated = A.dot(vc) # calculate bEst
+        difference = np.linalg.norm(bEstimated - b) # calculate difference between b and bEstimated
+        if difference < minDifference:
+            minDifference = difference
+            minDifferenceValue = vc
+    return minDifferenceValue
 
-# from qiskit.circuit.library import TwoLocal
-# qubits = 4
-# ansatz = TwoLocal(qubits, ['ry','cz'], reps=qubits -1, insert_barriers=True)
-# qc = QuantumCircuit(qubits)  # create a circuit and append the RY variational form
-# qc.compose(ansatz, inplace=True)
-# #decompose whats inside
-# qc.decompose().draw(output="mpl")
-
-# import numpy as np
-# from qiskit import QuantumCircuit, Aer, transpile, execute
-# from qiskit.quantum_info.operators import Operator
-# def convertMatrixIntoUnitary(matrix:np.ndarray):
-#     Q,_ = np.linalg.qr(matrix)
-#     # print(Q)
-#     for i in range(Q.shape[1]):
-#         Q[:,i] = Q[:,i]/np.linalg.norm(Q[:,i])
-
-#     # print(Q)
-#     return Operator(Q)
-
-# def convertUnitaryIntoCircuit(unitary:Operator):
-#     return unitary.to_instruction()
-
-# matrix = np.array([[1, 0, 0, 0],
-#                      [0, 0, 0, 1],
-#                      [0, 0, 1, 0],
-#                      [0, 3, 0, 0]])
-
-# unitary = convertMatrixIntoUnitary(matrix)
-# circuit = convertUnitaryIntoCircuit(unitary)
-
-# qc = QuantumCircuit(2,2)
-# qc.append(circuit, [0, 1])
-
-# backend = Aer.get_backend('unitary_simulator')
-
-# job = execute(qc, backend, shots=8192)
-# result = job.result()
-
-# # print(result.get_unitary(circuit, decimals=3))
-# qc.decompose().draw(output="mpl")
-
-# # circuit.draw(output="mpl")1
-
-# from qiskit.quantum_info import Operator
-
-# circuit = QuantumCircuit(2)
-
-# cx = Operator([
-#     [1, 0, 0, 0],
-#     [0, 0, 0, 1],
-#     [0, 0, 1, 0],
-#     [0, 1, 0, 0]
-# ])
-# circuit.unitary(cx, [0, 1], label='cx')
-# circuit.draw(output="mpl")
-# backend = Aer.get_backend('unitary_simulator')
-# t_gate = transpile(circuit, backend, basis_gates=['cx', 'u3', 'u1', 'u2', 'id', 'x', 'y', 'z', 'h', 's', 'sdg', 't', 'tdg', 'swap', 'ccx', 'cccx', 'cswap'])
-# t_gate.draw(output="mpl")
-# # execute(circ, backend).result().get_unitary()
+# estimate norm of vector
+# once we got the sign combination, we can calculate the norm of the vector
+# norm = b.T * b / b.T * A * v 
+# check this formula in the paper
+def estimateNorm(A: np.ndarray, estimatedX: np.array,b: np.array) -> (float, list):
+    v = bestMatchingSignsVector(A, estimatedX, b)
+    leftSide = b.T.dot(A.dot(v))
+    rightSide = b.T.dot(b)
+    estimatedNorm = rightSide/leftSide
+    return estimatedNorm, v

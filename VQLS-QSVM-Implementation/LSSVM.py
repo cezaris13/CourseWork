@@ -52,9 +52,15 @@ def prepareLabels(y):
 
 def predict(xTrain, xTest, weights, b, kernelFunction: callable = linearKernel):
     ls = kernelMatrix(xTest, xTrain, kernelFunction)
-    predictions = np.sign(np.dot(ls, weights) + b)
+    predictions = np.dot(ls, weights) + b
     return predictions
 
 
 def accuracy(yTest, predictions):
-    return np.sum(np.sign(predictions) == yTest) / len(yTest)
+    for i in range(len(predictions)):
+        if predictions[i] >= 0:
+            predictions[i] = 1
+        else:
+            predictions[i] = -1
+
+    return np.sum(predictions == yTest) / len(yTest)
