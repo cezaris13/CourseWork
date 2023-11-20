@@ -73,7 +73,8 @@ class VQLSSVM:
         elif xTest.shape[0] < self.xTrainSize:
             xTestCopy = xTest.copy()
             for _ in range(self.xTrainSize - xTest.shape[0]):
-                xTestCopy = np.append(xTestCopy, [[0, 0]], axis=0)
+                zeros = np.zeros((1, xTest.shape[1]))
+                xTestCopy = np.append(xTestCopy, zeros, axis=0)
             predictions = predict(
                 self.xTrain, xTestCopy, self.weights, self.b, kernelFunction
             )
