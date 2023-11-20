@@ -45,7 +45,7 @@ def convertMatrixIntoCircuit(
 
     for p in range(len(paulis)):
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]  # figure out type
+            currentGate = paulis[p][i]
             # currentGate = paulis[p][len(paulis[p])-1-i]
             if currentGate.x and currentGate.z == False:
                 if controlled:
@@ -72,7 +72,7 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
     for p in range(len(paulis)):
         containsIdentity: bool = False
         for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]  # figure out type
+            currentGate = paulis[p][i]
             # currentGate = paulis[p][len(paulis[p]) - 1 - i]
             if currentGate.x == False and currentGate.z == False:
                 containsIdentity = True
@@ -215,13 +215,11 @@ def specialHadamardTest(
         controlled=True,
         auxiliaryQubit=auxiliaryIndex,
         showBarriers=False,
-    )  # sita pakeisti predefined instructions
+    )
 
     circ.barrier()
 
-    controlB(
-        circ, auxiliaryIndex, qubits, weights
-    )  # sita pakeisti predefined instructions(turetu sutaupyti laiko)
+    controlB(circ, auxiliaryIndex, qubits, weights)
 
     circ.barrier()
 
@@ -240,8 +238,8 @@ def specialHadamardTest(
 # and I will be optimizing it in an update to this tutorial in the near future.
 def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
     print("Iteration:", len(costHistory) + 1, end="\r")
-    overallSum1 = 0
-    overallSum2 = 0
+    overallSum1: float = 0
+    overallSum2: float = 0
     backend = Aer.get_backend("aer_simulator")
 
     coefficientSet = args[0]
@@ -288,7 +286,7 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
         )
         resultVectors.append(outputstate)
 
-    for i in range(lenPaulis):  # optimize it little bit more
+    for i in range(lenPaulis):
         for j in range(lenPaulis):
             mult = 1
             for extra in range(2):
@@ -423,10 +421,10 @@ def minimization(
     method: str = "COBYLA",
     shots: int = 100000,
     iterations: int = 200,
-) -> list:
+) -> List[List[float]]:
     global costHistory
     costHistory = []
-    x = [float(random.randint(0, 3000)) for _ in range(0, 9)]
+    x: List[float] = [float(random.randint(0, 3000)) for _ in range(0, 9)]
     x = x / np.linalg.norm(x)
     start = time.time()
     (
@@ -507,9 +505,9 @@ def prepareCircuits(
     for i in range(len(paulis)):
         for j in range(len(paulis)):
             if isQuantumSimulation:
-                circ = QuantumCircuit(totalNeededQubits, 1)
+                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
             else:
-                circ = QuantumCircuit(totalNeededQubits)
+                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
             hadamardTest(
                 circ, [paulis[i], paulis[j]], [1, 2, 3], 0, parametersHadamardSplit
             )
@@ -523,9 +521,9 @@ def prepareCircuits(
 
     for i in range(len(paulis)):
         if isQuantumSimulation:
-            circ = QuantumCircuit(totalNeededQubits, 1)
+            circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
         else:
-            circ = QuantumCircuit(totalNeededQubits)
+            circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
         specialHadamardTest(
             circ, [paulis[i]], [1, 2, 3], 0, parametersSpecialHadamardSplit, bVector
         )
@@ -550,19 +548,21 @@ def prepareCircuits(
 # Quantum normalized vector after ansatztest can have negative or positive values,
 # so we need to check all combinations of signs, which one returns the minimum difference between b and bEstimated
 # minimum difference between b and bEstimated is the sign combination we are looking for
-def bestMatchingSignsVector(A: np.ndarray, xEstimated: np.array, b: np.array) -> list:
-    values = [-1, 1]
-    combos = list(
+def bestMatchingSignsVector(
+    A: np.ndarray, xEstimated: np.array, b: np.array
+) -> List[float]:
+    values: List[int] = [-1, 1]
+    combos: List[float] = list(
         product(values, repeat=len(xEstimated))
     )  # generates all 8 bit combinations
-    minDifference = 10000000
-    minDifferenceValue = []
+    minDifference: float = 10000000
+    minDifferenceValue: List[float] = []
     for combo in combos:
-        vc = np.multiply(
+        vc: List[float] = np.multiply(
             xEstimated, list(combo)
         )  # multiply each element of vector with the corresponding element of combo
-        bEstimated = A.dot(vc)  # calculate bEst
-        difference = np.linalg.norm(
+        bEstimated: List[float] = A.dot(vc)  # calculate bEst
+        difference: float = np.linalg.norm(
             bEstimated - b
         )  # calculate difference between b and bEstimated
         if difference < minDifference:
@@ -575,9 +575,11 @@ def bestMatchingSignsVector(A: np.ndarray, xEstimated: np.array, b: np.array) ->
 # once we got the sign combination, we can calculate the norm of the vector
 # norm = b.T * b / b.T * A * v
 # check this formula in the paper
-def estimateNorm(A: np.ndarray, estimatedX: np.array, b: np.array) -> (float, list):
-    v = bestMatchingSignsVector(A, estimatedX, b)
-    leftSide = b.T.dot(A.dot(v))
-    rightSide = b.T.dot(b)
-    estimatedNorm = rightSide / leftSide
+def estimateNorm(
+    A: np.ndarray, estimatedX: np.array, b: np.array
+) -> (float, List[float]):
+    v: List[float] = bestMatchingSignsVector(A, estimatedX, b)
+    leftSide: float = b.T.dot(A.dot(v))
+    rightSide: float = b.T.dot(b)
+    estimatedNorm: float = rightSide / leftSide
     return estimatedNorm, v

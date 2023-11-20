@@ -30,8 +30,8 @@ def letterToGate(letter: str) -> np.array:
         return None
 
 
-def createMatrixFromParameters(coefs: list, gates: list) -> np.array:
-    matrix = np.zeros((2 ** len(gates[0]), 2 ** len(gates[0])), dtype=complex)
+def createMatrixFromParameters(coefs: list, gates: list) -> np.ndarray:
+    matrix: np.ndarray = np.zeros((2 ** len(gates[0]), 2 ** len(gates[0])), dtype=complex)
     for gate in gates:
         tempGate = None
         gateTemp = gate[::-1]
