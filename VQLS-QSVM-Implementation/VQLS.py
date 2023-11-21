@@ -237,7 +237,10 @@ def specialHadamardTest(
 # In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented,
 # and I will be optimizing it in an update to this tutorial in the near future.
 def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
-    print("Iteration:", len(costHistory) + 1, end="\r")
+    cost = 0
+    if len(costHistory) > 0:
+        cost = costHistory[len(costHistory)-1]
+    print("Iteration:", len(costHistory) + 1, ", cost:", cost, end="\r")
     overallSum1: float = 0
     overallSum2: float = 0
     backend = Aer.get_backend("aer_simulator")
@@ -321,8 +324,10 @@ def calculateCostFunctionMatrix(parameters: list, args: list) -> float:
 
 # Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
 def calculateCostFunctionQuantumSimulation(parameters: list, args: list) -> float:
-    print("Iteration:", len(costHistory) + 1, end="\r")
-
+    cost = 0
+    if len(costHistory) > 0:
+        cost = costHistory[len(costHistory)-1]
+    print("Iteration:", len(costHistory) + 1, ", cost:", cost, end="\r")
     overallSum1 = 0
     overallSum2 = 0
     backend = Aer.get_backend("aer_simulator")
@@ -580,6 +585,6 @@ def estimateNorm(
 ) -> (float, List[float]):
     v: List[float] = bestMatchingSignsVector(A, estimatedX, b)
     leftSide: float = b.T.dot(A.dot(v))
-    rightSide: float = b.T.dot(b)
+    rightSide: float = b.T.dot(b) # maybe test this with \vec{1} vector
     estimatedNorm: float = rightSide / leftSide
     return estimatedNorm, v
