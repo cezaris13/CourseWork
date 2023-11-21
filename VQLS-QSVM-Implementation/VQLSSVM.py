@@ -1,11 +1,11 @@
-from LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
 from qiskit.quantum_info import SparsePauliOp, PauliList
-from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost
 from qiskit import QuantumCircuit
 import numpy as np
 from itertools import chain
 from typing import List
 
+from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost
+from LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
 
 class VQLSSVM:
     def __init__(self, gamma: float, shots: int):
