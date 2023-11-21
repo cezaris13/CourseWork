@@ -26,7 +26,9 @@ class VQLSSVM:
         yVector: np.array = prepareLabels(yTrain)
 
         if verbose:
-            print("LS-SVM Matrix:", inputMatrix)
+            print ("Condition number of the matrix: ", np.linalg.cond(inputMatrix))
+        if verbose:
+            print("LS-SVM Matrix:\n", inputMatrix)
 
         pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
         paulis: PauliList = pauliOp.paulis
@@ -56,34 +58,20 @@ class VQLSSVM:
         if verbose:
             print("Estimated norm:", estimatedNorm)
             print("Estimated vector:", estimatedVector)
+        
         weights: List[float] = estimatedVector * estimatedNorm
+        if verbose:
+            print("Weights:", weights)
         self.b = weights[0]
         self.weights = weights[1:]
         return self.weights, self.b
 
     def predict(
         self, xTest: np.ndarray, kernelFunction: callable = linearKernel
-    ) -> np.array: # optimize this
-        if xTest.shape[0] > self.xTrainSize:
-            splitTest = list(self.chunks(xTest, self.xTrainSize))
-            predictions = [
-                self.predict(xTestSubset, kernelFunction) for xTestSubset in splitTest
-            ]
-            predictions = np.array(list(chain.from_iterable(predictions)))
-        elif xTest.shape[0] < self.xTrainSize:
-            xTestCopy = xTest.copy()
-            for _ in range(self.xTrainSize - xTest.shape[0]):
-                zeros = np.zeros((1, xTest.shape[1]))
-                xTestCopy = np.append(xTestCopy, zeros, axis=0)
-            predictions = predict(
-                self.xTrain, xTestCopy, self.weights, self.b, kernelFunction
-            )
-            predictions = predictions[: xTest.shape[0]]
-        else:
-            predictions = predict(
+    ) -> np.array:
+        return predict(
                 self.xTrain, xTest, self.weights, self.b, kernelFunction
             )
-        return predictions
 
     def accuracy(self, xTest: np.ndarray, yTest: np.array) -> float:
         correct: int = 0
