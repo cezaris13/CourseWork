@@ -323,9 +323,9 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
             resultVectors.append(outputstate)
 
     for i in range(lenPaulis):
-        for j in range(lenPaulis):
+        for j in range(lenPaulis-i):
             mult = 1
-            indexArray = [i, j]
+            indexArray = [i, j+i]
             for index in indexArray:
                 if isQuantumSimulation:
                     outputstate = results.get_counts(bindedSpecHadamardGates[index])
@@ -333,8 +333,12 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
                     outputstate = resultVectors[index]
                 m_sum = getMSum(isQuantumSimulation, outputstate, shots)
                 mult = mult * (1 - (2 * m_sum))
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum2 += multiply * mult
+            multiply = coefficientSet[i] * coefficientSet[j+i]
+            if j == 0:
+                overallSum2 += multiply * mult
+            else:   
+                tempSum = multiply * mult
+                overallSum2 += tempSum + np.conjugate(tempSum)
     # del results
     # del bindedSpecHadamardGates
 
