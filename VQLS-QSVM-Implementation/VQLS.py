@@ -11,6 +11,9 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor
 import gc
 from itertools import product
+from qiskit.algorithms.optimizers import ADAM, SPSA, GradientDescent
+import contextlib
+import io
 
 costHistory = []
 # weightsValueHistory = []
@@ -472,7 +475,8 @@ def ansatzTest(circ: QuantumCircuit, outF: list):
 
     backend = Aer.get_backend("aer_simulator")
 
-    t_circ = transpile(circ, backend)
+    with contextlib.redirect_stdout(io.StringIO()):
+        t_circ = transpile(circ, backend)
     job = backend.run(t_circ)
 
     result = job.result()
@@ -519,6 +523,47 @@ def minimization(
         minimizationFunction = calculateCostFunction
 
     exc = ThreadPoolExecutor(max_workers=4)
+    args = [
+        coefficientSet,
+        transpiledHadamardCircuits,
+        parametersHadamard,
+        transpiledSpecialHadamardCircuits,
+        parametersSpecialHadamard,
+        quantumSimulation,
+        shots,
+        exc,
+    ]
+
+    funcWrapper = lambda params: minimizationFunction(params, args)
+
+
+    if method == "ADAM":
+        optimizer = ADAM(maxiter=iterations, lr=0.05)
+        # train
+        optimizer.load_params
+        out = optimizer.minimize(
+            funcWrapper,
+            x0=x
+        )
+        end = time.time()
+        print("Time to minimize:", end - start)
+        print(out)
+        return [out.x[0:3], out.x[3:6], out.x[6:9]]
+    elif method == "SPSA":
+        opt = SPSA(maxiter=iterations,learning_rate=0.2,perturbation=0.1)
+        out = opt.minimize(funcWrapper, x0=x)
+        end = time.time()
+        print("Time to minimize:", end - start)
+        print(out)
+        return [out.x[0:3], out.x[3:6], out.x[6:9]]
+    elif method == "GD":
+        opt = GradientDescent(maxiter=iterations,learning_rate=0.5)
+        out = opt.minimize(funcWrapper, x0=x)
+        end = time.time()
+        print("Time to minimize:", end - start)
+        print(out)
+        return [out.x[0:3], out.x[3:6], out.x[6:9]]
+
     out = minimize(
         minimizationFunction,
         x0=x,
@@ -598,7 +643,8 @@ def prepareCircuits(
                     circ.save_statevector()
 
                 tempHadamardCircuits.append(circ)
-            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
+            with contextlib.redirect_stdout(io.StringIO()):
+                hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
             transpiledHadamardCircuits.append(hadamardCircuits)
     else:  # remove this else statement after course paper defence
         for i in range(len(paulis)):
@@ -625,7 +671,9 @@ def prepareCircuits(
                     circ.save_statevector()
 
                 hadamardCircuits.append(circ)
-        transpiledHadamardCircuits = transpile(hadamardCircuits, backend=backend)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            transpiledHadamardCircuits = transpile(hadamardCircuits, backend=backend)
 
     for i in range(len(paulis)):
         if isQuantumSimulation:
@@ -642,10 +690,10 @@ def prepareCircuits(
             circ.save_statevector()
 
         specialHadamardCircuits.append(circ)
-
-    transpiledSpecialHadamardCircuits = transpile(
-        specialHadamardCircuits, backend=backend
-    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        transpiledSpecialHadamardCircuits = transpile(
+            specialHadamardCircuits, backend=backend
+        )
 
     return (
         transpiledHadamardCircuits,
