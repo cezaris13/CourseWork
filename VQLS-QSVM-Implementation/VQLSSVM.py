@@ -4,7 +4,7 @@ import numpy as np
 from itertools import chain
 from typing import List
 
-from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost
+from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost, getCostHistory
 from LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
 
 class VQLSSVM:
@@ -18,6 +18,7 @@ class VQLSSVM:
         yTrain: np.ndarray,
         quantumSimulation: bool = True,
         iterations: int = 200,
+        method: str = "COBYLA",
         verbose: bool = False,
     ) -> (np.array, float):
         self.xTrain = xTrain
@@ -29,9 +30,10 @@ class VQLSSVM:
             print ("Condition number of the matrix: ", np.linalg.cond(inputMatrix))
         if verbose:
             print("LS-SVM Matrix:\n", inputMatrix)
-
         pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
         paulis: PauliList = pauliOp.paulis
+        # self.totalNeededQubits = pauliOp.num_qubits + 2
+        # self.inputMatrix = inputMatrix
         if verbose:
             print(paulis)
 
@@ -46,6 +48,7 @@ class VQLSSVM:
             bVector=yVector,
             quantumSimulation=quantumSimulation,
             shots=self.shots,
+            method=method,
             iterations=iterations,
         )
         if verbose:
@@ -67,15 +70,20 @@ class VQLSSVM:
         return self.weights, self.b
 
     def predict(
-        self, xTest: np.ndarray, kernelFunction: callable = linearKernel
+        self, xTest: np.ndarray, weights: np.array = [], kernelFunction: callable = linearKernel
     ) -> np.array:
-        return predict(
+        if weights != []:
+            return predict(
+                self.xTrain, xTest, weights, self.b, kernelFunction
+            )
+        else:
+            return predict(
                 self.xTrain, xTest, self.weights, self.b, kernelFunction
             )
 
-    def accuracy(self, xTest: np.ndarray, yTest: np.array) -> float:
+    def accuracy(self, xTest: np.ndarray, yTest: np.array, weights: np.array = []) -> float:
         correct: int = 0
-        predictions: np.array = self.predict(xTest)
+        predictions: np.array = self.predict(xTest,weights=weights)
         predictions = [self.assignClass(i) for i in predictions]
         for i in range(len(predictions)):
             if predictions[i] == yTest[i]:
@@ -90,6 +98,30 @@ class VQLSSVM:
     def plotCost(self):
         plotCost()
 
+    def getCostHistory(self):
+        return getCostHistory()
+
+    # def plotAccuracy(self, xTest: np.ndarray, yTest: np.array) -> int:
+    #     print("Plotting accuracy")
+    #     accuracyList = []
+    #     print (self.totalNeededQubits)
+    #     parameters = getWeightsValueHistory()
+    #     print(parameters)
+    #     inputMatrix = self.inputMatrix
+    #     print(inputMatrix)
+    #     # for parameter in parameters:
+    #     parameter = parameters[0]
+    #     out = [parameter[0:3], parameter[3:6], parameter[6:9]]
+    #     qc = QuantumCircuit(self.totalNeededQubits,self.totalNeededQubits)
+    #     weights = ansatzTest(qc,out)
+    #     print (weights)
+    #     estimatedNorm, estimatedNormVector = estimateNorm(inputMatrix, weights, yTest)
+    #     print(estimatedNorm)    
+    #     # weightsVector = estimatedNorm * estimatedNormVector
+    #     # print(weightsVector)
+    #     # accuracyList.append(self.accuracy(xTest, yTest, weights=weightsVector))
+    #     return accuracyList
+    
     def assignClass(self, prediction: float) -> int:
         if prediction >= 0:
             return 1
