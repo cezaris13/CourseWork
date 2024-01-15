@@ -20,6 +20,7 @@ class VQLSSVM:
         quantumSimulation: bool = True,
         iterations: int = 200,
         method: str = "COBYLA",
+        lcuMethod: str = "TPD",
         verbose: bool = False,
     ) -> (np.array, float):
         self.xTrain = xTrain
@@ -31,11 +32,9 @@ class VQLSSVM:
             print ("Condition number of the matrix: ", np.linalg.cond(inputMatrix))
         if verbose:
             print("LS-SVM Matrix:\n", inputMatrix)
-        pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix) # move to separate function where we can choose between tpd and sparsepauliop
-        paulis: PauliList = pauliOp.paulis
-        coefficientSet: List[float] = getMatrixCoeffitients(pauliOp) # up until here
-        # self.totalNeededQubits = pauliOp.num_qubits + 2
-        # self.inputMatrix = inputMatrix
+        paulis, coefficientSet = self.getLCU(inputMatrix, method=lcuMethod)
+        qubits = len(paulis[0])
+       
         if verbose:
             print(paulis)
 
@@ -45,7 +44,7 @@ class VQLSSVM:
         outF: List[List[float]] = minimization(
             paulis=paulis,
             coefficientSet=coefficientSet,
-            totalNeededQubits=pauliOp.num_qubits + 2,
+            totalNeededQubits=qubits + 2,
             bVector=yVector,
             quantumSimulation=quantumSimulation,
             shots=self.shots,
@@ -55,7 +54,7 @@ class VQLSSVM:
         )
         if verbose:
             print("Output Vector:", outF)
-        circ: QuantumCircuit = QuantumCircuit(pauliOp.num_qubits, pauliOp.num_qubits)
+        circ: QuantumCircuit = QuantumCircuit(qubits, qubits)
         estimatedX: List[complex] = ansatzTest(circ, outF)
         if verbose:
             print("Output Vector after ansatz test:", estimatedX)
@@ -105,14 +104,15 @@ class VQLSSVM:
     
     def getLCU(self, inputMatrix, method: str = "TPD"):
         if method == "TPD":
-            return PauliDecomposition(inputMatrix, sparse=True)# most likely do post processing as in sparsePauliOp option
+            paulis, coefficientSet = PauliDecomposition(inputMatrix, sparse=True)
+            pauliOp = SparsePauliOp(paulis, coefficientSet)
         elif method == "sparsePauliOp":
             pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
-            paulis: PauliList = pauliOp.paulis
-            coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
-            return paulis, coefficientSet
         else:
-            raise Exception("Method not implemented")
+            raise ValueError("Method not implemented")
+        paulis: PauliList = pauliOp.paulis
+        coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
+        return paulis, coefficientSet
 
 
     # def plotAccuracy(self, xTest: np.ndarray, yTest: np.array) -> int:
