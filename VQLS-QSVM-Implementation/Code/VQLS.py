@@ -98,20 +98,8 @@ def applyFixedAnsatz(
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    for i in range(len(qubits)):
-        circ.ry(parameters[0][i], qubits[i])
-
-    circ.cz(qubits[0], qubits[1])
-    circ.cz(qubits[2], qubits[0])
-
-    for i in range(len(qubits)):
-        circ.ry(parameters[1][i], qubits[i])
-
-    circ.cz(qubits[1], qubits[2])
-    circ.cz(qubits[2], qubits[0])
-
-    for i in range(len(qubits)):
-        circ.ry(parameters[2][i], qubits[i])
+    gates = getFixedAnsatzGates(qubits, parameters)
+    gatesToCircuit(circ, gates)
 
 
 # Creates the Hadamard test
@@ -172,33 +160,9 @@ def controlFixedAnsatz(
     circ: QuantumCircuit,
     qubits: List[int],
     parameters: List[List[float]],
-    auxiliaryIndex: int,
 ):
-    for i in range(len(qubits)):
-        circ.cry(parameters[0][i], auxiliaryIndex, qubits[i])
-
-    circ.ccx(auxiliaryIndex, qubits[1], 4)
-    circ.cz(qubits[0], 4)
-    circ.ccx(auxiliaryIndex, qubits[1], 4)
-
-    circ.ccx(auxiliaryIndex, qubits[0], 4)
-    circ.cz(qubits[2], 4)
-    circ.ccx(auxiliaryIndex, qubits[0], 4)
-
-    for i in range(len(qubits)):
-        circ.cry(parameters[1][i], auxiliaryIndex, qubits[i])
-
-    circ.ccx(auxiliaryIndex, qubits[2], 4)
-    circ.cz(qubits[1], 4)
-    circ.ccx(auxiliaryIndex, qubits[2], 4)
-
-    circ.ccx(auxiliaryIndex, qubits[0], 4)
-    circ.cz(qubits[2], 4)
-    circ.ccx(auxiliaryIndex, qubits[0], 4)
-
-    for i in range(len(qubits)):
-        circ.cry(parameters[2][i], auxiliaryIndex, qubits[i])
-
+    gates = getControlledFixedAnsatzGates(qubits, parameters)
+    gatesToCircuit(circ, gates)
 
 # Create the controlled Hadamard test, for calculating <psi|psi>
 def specialHadamardTest(
@@ -213,7 +177,8 @@ def specialHadamardTest(
 
     circ.barrier()
 
-    controlFixedAnsatz(circ, qubits, parameters, auxiliaryIndex)
+    controlQubits = [i-1 for i in qubits] # fix that in the future
+    controlFixedAnsatz(circ, controlQubits, parameters)
 
     circ.barrier()
 
@@ -755,6 +720,77 @@ def estimateNorm(
 
     return estimatedNorm, v
 
+def gatesToCircuit(circuit:QuantumCircuit, gateList):
+    for i in range(len(gateList)):
+        if gateList[i][0] == "Ry":  # ("Ry", (theta, qubit))
+            circuit.ry(gateList[i][1][0], gateList[i][1][1])
+        elif gateList[i][0] == "Rx":  # ("Rx", (theta, qubit))
+            circuit.rx(gateList[i][1][0], gateList[i][1][1])
+        elif gateList[i][0] == "Rz":  # ("Rz", (theta, qubit))
+            circuit.rz(gateList[i][1][0], gateList[i][1][1])
+        elif gateList[i][0] == "CNOT":  # ("CNOT", (control, target))
+            circuit.cx(gateList[i][1][0], gateList[i][1][1])
+        elif gateList[i][0] == "CZ":  # ("CZ", (control, target))
+            circuit.cz(gateList[i][1][0], gateList[i][1][1])
+        elif gateList[i][0] == "CCNOT":  # ("CCNOT", (control1, control2, target))
+            circuit.ccx(gateList[i][1][0], gateList[i][1][1], gateList[i][1][2])
+        elif gateList[i][0] == "CRx":  # ("CRx", (theta, (control, target))
+            circuit.crx(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
+        elif gateList[i][0] == "CRy":  # ("CRy", (theta, (control, target))
+            circuit.cry(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
+        elif gateList[i][0] == "CRz":  # ("CRz", (theta, (control, target))
+            circuit.crz(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
+
+
+def getFixedAnsatzGates(
+    qubits: List[int], parameters: List[List[float]]
+):  # maybe change to 2local or EfficientSU2
+    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
+    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
+    # if qubits < 3:
+    #       raise Exception("Qubits must be at least 3")
+    # elif qubits == 3:
+    # else:
+    #     # gates = [("CRy", (0, 1,0)), ("Rz", (1, 0)), ("Rx",(2, 0)), ("CCNOT", (0, 1, 2))]
+    #    
+    gates = []
+    for i in range(len(qubits)):
+        gates.append(("Ry", (parameters[0][i], qubits[i])))
+    gates.append(("CZ", (qubits[0], qubits[1])))
+    gates.append(("CZ", (qubits[2], qubits[0])))
+
+    for i in range(len(qubits)):
+        gates.append(("Ry", (parameters[1][i], qubits[i])))
+    gates.append(("CZ", (qubits[1], qubits[2])))
+    gates.append(("CZ", (qubits[2], qubits[0])))
+
+    for i in range(len(qubits)):
+        gates.append(("Ry", (parameters[2][i], qubits[i])))
+    return gates
+
+
+def getControlledFixedAnsatzGates(qubits: List[int], parameters: List[List[float]]):
+    gates = getFixedAnsatzGates(qubits, parameters)
+    controlledGates = []
+    auxiliaryQubit = 0
+    auxiliaryQubit2 = len(qubits) + 1
+    for i in range(len(gates)):
+        if gates[i][0] == "Ry":
+            controlledGates.append(("CRy", (gates[i][1][0], (0, gates[i][1][1] + 1))))
+        elif gates[i][0] == "Rx":
+            controlledGates.append(("CRx", (gates[i][1][0], (0, gates[i][1][1] + 1))))
+        elif gates[i][0] == "Rz":
+            controlledGates.append(("CRz", (gates[i][1][0], (0, gates[i][1][1] + 1))))
+        elif gates[i][0] == "CZ":
+            controlledGates.append(
+                ("CCNOT", (auxiliaryQubit, gates[i][1][1] + 1, auxiliaryQubit2))
+            )
+            controlledGates.append(("CZ", (gates[i][1][0] + 1, auxiliaryQubit2)))
+            controlledGates.append(
+                ("CCNOT", (auxiliaryQubit, gates[i][1][1] + 1, auxiliaryQubit2))
+            )
+
+    return controlledGates
 
 # def calculateWeightsAccuracy(A, bVector, qubits: int) -> float:
 #     accuracyList = []
