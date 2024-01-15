@@ -3,10 +3,12 @@ from qiskit import QuantumCircuit
 import numpy as np
 from itertools import chain
 from typing import List
+import sys
+sys.path.append("..")
 
-from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost, getCostHistory
-from LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
-from TensorizedPauliDecomposition import PauliDecomposition
+from Code.VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost, getCostHistory
+from Code.LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
+from ThirdParty.TensorizedPauliDecomposition import PauliDecomposition
 
 class VQLSSVM:
     def __init__(self, gamma: float, shots: int):
