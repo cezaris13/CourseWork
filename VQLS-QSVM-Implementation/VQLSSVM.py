@@ -50,6 +50,7 @@ class VQLSSVM:
             shots=self.shots,
             method=method,
             iterations=iterations,
+            verbose=verbose,
         )
         if verbose:
             print("Output Vector:", outF)
@@ -121,7 +122,7 @@ class VQLSSVM:
     #     # print(weightsVector)
     #     # accuracyList.append(self.accuracy(xTest, yTest, weights=weightsVector))
     #     return accuracyList
-    
+
     def assignClass(self, prediction: float) -> int:
         if prediction >= 0:
             return 1
