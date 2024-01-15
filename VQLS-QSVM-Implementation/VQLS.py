@@ -492,6 +492,7 @@ def minimization(
     method: str = "COBYLA",
     shots: int = 100000,
     iterations: int = 200,
+    verbose: bool = True,
     fast: bool = True,
 ) -> List[List[float]]:
     global costHistory
@@ -515,7 +516,8 @@ def minimization(
         fast=fast
     )
     end = time.time()
-    print("Time to prepare circuits:", end - start)
+    if verbose:
+        print("Time to prepare circuits:", end - start)
     start = time.time()
     if fast:
         minimizationFunction = calculateCostFunctionFast
@@ -546,22 +548,25 @@ def minimization(
             x0=x
         )
         end = time.time()
-        print("Time to minimize:", end - start)
-        print(out)
+        if verbose:
+            print("Time to minimize:", end - start)
+            print(out)
         return [out.x[0:3], out.x[3:6], out.x[6:9]]
     elif method == "SPSA":
         opt = SPSA(maxiter=iterations,learning_rate=0.2,perturbation=0.1)
         out = opt.minimize(funcWrapper, x0=x)
         end = time.time()
-        print("Time to minimize:", end - start)
-        print(out)
+        if verbose:
+            print("Time to minimize:", end - start)
+            print(out)
         return [out.x[0:3], out.x[3:6], out.x[6:9]]
     elif method == "GD":
         opt = GradientDescent(maxiter=iterations,learning_rate=0.5)
         out = opt.minimize(funcWrapper, x0=x)
         end = time.time()
-        print("Time to minimize:", end - start)
-        print(out)
+        if verbose:
+            print("Time to minimize:", end - start)
+            print(out)
         return [out.x[0:3], out.x[3:6], out.x[6:9]]
 
     out = minimize(
@@ -582,8 +587,10 @@ def minimization(
     )
 
     end = time.time()
-    print("Time to minimize:", end - start)
-    print(out)
+
+    if verbose:
+        print("Time to minimize:", end - start)
+        print(out)
     return [out["x"][0:3], out["x"][3:6], out["x"][6:9]]
 
 
