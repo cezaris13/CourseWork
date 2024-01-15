@@ -91,7 +91,7 @@ def PauliDecomposition(matrix,sparse=False,PauliStringInit="",output="Lists"):
 					decomposition.append(subDec)
 
 	if output == "Lists":
-		return [Strings,Coeffs]
+		return Strings, Coeffs
 	else:
 		outputString = "".join(decomposition)
 		return outputString

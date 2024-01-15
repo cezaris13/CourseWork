@@ -6,6 +6,7 @@ from typing import List
 
 from VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost, getCostHistory
 from LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
+from TensorizedPauliDecomposition import PauliDecomposition
 
 class VQLSSVM:
     def __init__(self, gamma: float, shots: int):
@@ -30,14 +31,14 @@ class VQLSSVM:
             print ("Condition number of the matrix: ", np.linalg.cond(inputMatrix))
         if verbose:
             print("LS-SVM Matrix:\n", inputMatrix)
-        pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
+        pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix) # move to separate function where we can choose between tpd and sparsepauliop
         paulis: PauliList = pauliOp.paulis
+        coefficientSet: List[float] = getMatrixCoeffitients(pauliOp) # up until here
         # self.totalNeededQubits = pauliOp.num_qubits + 2
         # self.inputMatrix = inputMatrix
         if verbose:
             print(paulis)
 
-        coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
         if verbose:
             print("Pauli matrix coeffitients", coefficientSet)
 
@@ -101,6 +102,18 @@ class VQLSSVM:
 
     def getCostHistory(self):
         return getCostHistory()
+    
+    def getLCU(self, inputMatrix, method: str = "TPD"):
+        if method == "TPD":
+            return PauliDecomposition(inputMatrix, sparse=True)# most likely do post processing as in sparsePauliOp option
+        elif method == "sparsePauliOp":
+            pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
+            paulis: PauliList = pauliOp.paulis
+            coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
+            return paulis, coefficientSet
+        else:
+            raise Exception("Method not implemented")
+
 
     # def plotAccuracy(self, xTest: np.ndarray, yTest: np.array) -> int:
     #     print("Plotting accuracy")
