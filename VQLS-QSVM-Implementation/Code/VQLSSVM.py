@@ -103,8 +103,9 @@ class VQLSSVM:
 
     def getCostHistory(self):
         return getCostHistory()
-    
-    def getLCU(self, inputMatrix, method: str = "TPD"):
+
+    @staticmethod
+    def getLCU(inputMatrix, method: str = "TPD"):
         if method == "TPD":
             paulis, coefficientSet = PauliDecomposition(inputMatrix, sparse=True)
             pauliOp = SparsePauliOp(paulis, coefficientSet)

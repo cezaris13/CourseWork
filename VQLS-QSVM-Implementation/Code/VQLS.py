@@ -94,11 +94,11 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
 
 
 def applyFixedAnsatz(
-    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]]
+    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]], offset: int = 0
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    gates = getFixedAnsatzGates(qubits, parameters)
+    gates = getFixedAnsatzGates(qubits, parameters,offset=offset)
     gatesToCircuit(circ, gates)
 
 
@@ -106,15 +106,15 @@ def applyFixedAnsatz(
 def hadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
-    qubits: List[int],
-    auxiliaryIndex: int,
+    qubits: int,
     parameters: List[List[float]],
 ):
+    auxiliaryIndex = 0
     circ.h(auxiliaryIndex)
 
     circ.barrier()
 
-    applyFixedAnsatz(circ, qubits, parameters)
+    applyFixedAnsatz(circ, qubits, parameters, offset=1)
 
     circ.barrier()
 
@@ -132,8 +132,9 @@ def hadamardTest(
 
 
 def controlB(
-    circ: QuantumCircuit, auxiliaryIndex: int, qubits: List[int], values: List[float]
+    circ: QuantumCircuit, auxiliaryIndex: int, qubits: int, values: List[float]
 ):
+    qubits = [i+1 for i in range(qubits)]
     custom = createB(values).to_gate().control()
     circ.append(custom, [auxiliaryIndex] + qubits)
 
@@ -158,7 +159,7 @@ def getBArray(values: List[float]) -> np.array:
 # Creates controlled anstaz for calculating |<b|psi>|^2 with a Hadamard test
 def controlFixedAnsatz(
     circ: QuantumCircuit,
-    qubits: List[int],
+    qubits: int,
     parameters: List[List[float]],
 ):
     gates = getControlledFixedAnsatzGates(qubits, parameters)
@@ -168,17 +169,16 @@ def controlFixedAnsatz(
 def specialHadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
-    qubits: List[int],
-    auxiliaryIndex: int,
+    qubits: int,
     parameters: List[List[float]],
     weights: List[float],
 ):
+    auxiliaryIndex = 0
     circ.h(auxiliaryIndex)
 
     circ.barrier()
 
-    controlQubits = [i-1 for i in qubits] # fix that in the future
-    controlFixedAnsatz(circ, controlQubits, parameters)
+    controlFixedAnsatz(circ, qubits, parameters)
 
     circ.barrier()
 
@@ -199,16 +199,6 @@ def specialHadamardTest(
     circ.h(auxiliaryIndex)
 
 
-# Now, we are ready to calculate the final cost function. This simply involves us taking the products of all combinations of the expectation outputs from the different circuits,
-# multiplying by their respective coefficients, and arranging into the cost function that we discussed previously!
-# Implements the entire cost function on the quantum circuit theoretically
-
-
-### This code may look long and daunting, but it isn't! In this simulation,
-# I'm taking a numerical approach, where I'm calculating the amplitude squared of each state corresponding to a measurement of the auxiliary Hadamard test qubit in the $1$ state, then calculating P(0) - P(1)  = 1 - 2P(1) with that information.
-# This is very exact, but is not realistic, as a real quantum device would have to sample the circuit many times to generate these probabilities (I'll discuss sampling later).
-# In addition, this code is not completely optimized (it completes more evaluations of the quantum circuit than it has to), but this is the simplest way in which the code can be implemented,
-# and I will be optimizing it in an update to this tutorial in the near future.
 def calculateCostFunctionFast(parameters: list, args: list) -> float:
     cost = 0
     if len(costHistory) > 0:
@@ -244,13 +234,13 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
     # backend.set_options(executor=exc)
     # backend.set_options(max_job_size=1)
 
-    # paduodama trikampe matrica:
+    # we have triangular matrix:
     # X X X X X
     # . X X X X
     # . . X X X
     # . . . X X
     # . . . . X
-    # apatines nariai skaiciuojami formule: <0|V(a)^d A_n^d A_m V(a)|0> = (<0|V(a)^d A_m^d A_n V(a)|0>) conjugate
+    # lower triangular matrix is calculated using this formula: <0|V(a)^d A_n^d A_m V(a)|0> = (<0|V(a)^d A_m^d A_n V(a)|0>) conjugate
     # c_n conj c_m <0|V(a)^d A_n^d A_m V(a)|0> = ( c_n conj c_m <0|V(a)^d A_m^d A_n V(a)|0>) conjugate
     for i in range(lenPaulis):
         for j in range(lenPaulis - i):
@@ -327,94 +317,6 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
 
 
 # Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
-def calculateCostFunction(parameters: list, args: list) -> float:
-    cost = 0
-    if len(costHistory) > 0:
-        cost = costHistory[len(costHistory) - 1]
-    print("Iteration:", len(costHistory) + 1, ", cost:", cost, end="\r")
-    overallSum1: float = 0
-    overallSum2: float = 0
-    backend = Aer.get_backend("aer_simulator")
-
-    coefficientSet = args[0]
-    transpiledHadamardCircuits = args[1]
-    parametersHadamard = args[2]
-    transpiledSpecialHadamardCircuits = args[3]
-    parametersSpecialHadamard = args[4]
-    isQuantumSimulation = args[5]
-    shots = args[6]
-    exc = args[7]
-
-    bindedHadamardGates = [
-        i.bind_parameters({parametersHadamard: parameters})
-        for i in transpiledHadamardCircuits
-    ]
-    bindedSpecHadamardGates = [
-        i.bind_parameters({parametersSpecialHadamard: parameters})
-        for i in transpiledSpecialHadamardCircuits
-    ]
-    lenPaulis = len(bindedSpecHadamardGates)
-
-    # backend.set_options(executor=exc)
-    # backend.set_options(max_job_size=1)
-
-    if isQuantumSimulation:
-        results = backend.run(bindedHadamardGates, shots=shots).result()
-
-    for i in range(lenPaulis):
-        for j in range(lenPaulis):
-            if isQuantumSimulation:
-                outputstate = results.get_counts(bindedHadamardGates[i * lenPaulis + j])
-            else:
-                job = backend.run(bindedHadamardGates[i * lenPaulis + j])
-                result = job.result()
-                outputstate = np.real(
-                    result.get_statevector(
-                        bindedHadamardGates[i * lenPaulis + j], decimals=100
-                    )
-                )
-            m_sum = getMSum(isQuantumSimulation, outputstate, shots)
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum1 += multiply * (1 - (2 * m_sum))
-
-    # del results
-    # del bindedHadamardGates
-
-    # gc.collect()
-    if isQuantumSimulation:
-        results = backend.run(bindedSpecHadamardGates, shots=shots).result()
-    else:
-        resultVectors = []
-        for i in range(lenPaulis):
-            job = backend.run(bindedSpecHadamardGates[i])
-            result = job.result()
-            outputstate = np.real(
-                result.get_statevector(bindedSpecHadamardGates[i], decimals=100)
-            )
-            resultVectors.append(outputstate)
-
-    for i in range(lenPaulis):
-        for j in range(lenPaulis):
-            mult = 1
-            indexArray = [i, j]
-            for index in indexArray:
-                if isQuantumSimulation:
-                    outputstate = results.get_counts(bindedSpecHadamardGates[index])
-                else:
-                    outputstate = resultVectors[index]
-                m_sum = getMSum(isQuantumSimulation, outputstate, shots)
-                mult = mult * (1 - (2 * m_sum))
-
-            multiply = coefficientSet[i] * coefficientSet[j]
-            overallSum2 += multiply * mult
-
-    # del results
-    # del bindedSpecHadamardGates
-
-    # gc.collect()
-    totalCost = 1 - float(overallSum2.real / overallSum1.real)
-    costHistory.append(totalCost)
-    return totalCost
 
 
 def getMSum(isQuantumSimulation:bool, outputstate, shots: int)-> float:
@@ -435,7 +337,7 @@ def getMSum(isQuantumSimulation:bool, outputstate, shots: int)-> float:
 
 # test and minimization functions here
 def ansatzTest(circ: QuantumCircuit, outF: list):
-    applyFixedAnsatz(circ, [0, 1, 2], outF)
+    applyFixedAnsatz(circ, 3, outF)
     circ.save_statevector()
 
     backend = Aer.get_backend("aer_simulator")
@@ -458,7 +360,7 @@ def minimization(
     shots: int = 100000,
     iterations: int = 200,
     verbose: bool = True,
-    fast: bool = True,
+    options: dict = {},
 ) -> List[List[float]]:
     global costHistory
     costHistory = []
@@ -478,19 +380,14 @@ def minimization(
         totalNeededQubits,
         quantumSimulation,
         "aer_simulator",
-        fast=fast
     )
     end = time.time()
     if verbose:
         print("Time to prepare circuits:", end - start)
-    start = time.time()
-    if fast:
-        minimizationFunction = calculateCostFunctionFast
-    else:
-        minimizationFunction = calculateCostFunction
+    minimizationFunction = calculateCostFunctionFast
 
     exc = ThreadPoolExecutor(max_workers=4)
-    args = [
+    arguments = [
         coefficientSet,
         transpiledHadamardCircuits,
         parametersHadamard,
@@ -501,52 +398,37 @@ def minimization(
         exc,
     ]
 
-    funcWrapper = lambda params: minimizationFunction(params, args)
+    start = time.time()
+    methods = ["ADAM", "SPSA", "GD"]
 
+    if method in methods:
+        funcWrapper = lambda params: minimizationFunction(params, arguments)
 
-    if method == "ADAM":
-        optimizer = ADAM(maxiter=iterations, lr=0.05)
-        # train
-        optimizer.load_params
+        if method == "ADAM":
+            lr = options["lr"] if "lr" in options else 0.05
+            optimizer = ADAM(maxiter=iterations, lr=lr)
+        elif method == "SPSA":
+            learning_rate = options["learning_rate"] if "learning_rate" in options else 0.2
+            perturbation = options["perturbation"] if "perturbation" in options else 0.1
+            optimizer = SPSA(maxiter=iterations,learning_rate=learning_rate,perturbation=perturbation)
+        elif method == "GD":
+            learning_rate = options["learning_rate"] if "learning_rate" in options else 0.2
+            optimizer = GradientDescent(maxiter=iterations,learning_rate=learning_rate)
+
         out = optimizer.minimize(
             funcWrapper,
             x0=x
-        )
+            )
         end = time.time()
         if verbose:
             print("Time to minimize:", end - start)
             print(out)
         return [out.x[0:3], out.x[3:6], out.x[6:9]]
-    elif method == "SPSA":
-        opt = SPSA(maxiter=iterations,learning_rate=0.2,perturbation=0.1)
-        out = opt.minimize(funcWrapper, x0=x)
-        end = time.time()
-        if verbose:
-            print("Time to minimize:", end - start)
-            print(out)
-        return [out.x[0:3], out.x[3:6], out.x[6:9]]
-    elif method == "GD":
-        opt = GradientDescent(maxiter=iterations,learning_rate=0.5)
-        out = opt.minimize(funcWrapper, x0=x)
-        end = time.time()
-        if verbose:
-            print("Time to minimize:", end - start)
-            print(out)
-        return [out.x[0:3], out.x[3:6], out.x[6:9]]
-
+    
     out = minimize(
         minimizationFunction,
         x0=x,
-        args=[
-            coefficientSet,
-            transpiledHadamardCircuits,
-            parametersHadamard,
-            transpiledSpecialHadamardCircuits,
-            parametersSpecialHadamard,
-            quantumSimulation,
-            shots,
-            exc,
-        ],
+        args=arguments,
         method=method,
         options={"maxiter": iterations},
     )
@@ -565,8 +447,8 @@ def prepareCircuits(
     totalNeededQubits: int,
     isQuantumSimulation: bool,
     backendStr: str,
-    fast: bool = False,
 ) -> (list, ParameterVector, list, ParameterVector):
+    qubits = totalNeededQubits - 2
     backend = Aer.get_backend(backendStr)
     parametersHadamard: ParameterVector = ParameterVector(
         "parametersHadarmard", 9
@@ -589,75 +471,44 @@ def prepareCircuits(
     specialHadamardCircuits: List[QuantumCircuit] = []
     transpiledHadamardCircuits: List[List[QuantumCircuit]] = []
 
-    if fast:
-        for i in range(len(paulis)):
-            tempHadamardCircuits: List[QuantumCircuit] = []
-            for j in range(i, len(paulis)):
-                if isQuantumSimulation:
-                    circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
-                    hadamardTest(
-                        circ,
-                        [paulis[i], paulis[j]],
-                        [1, 2, 3],
-                        0,
-                        parametersHadamardSplit,
-                    )
-                    circ.measure(0, 0)
-                else:
-                    circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
-                    hadamardTest(
-                        circ,
-                        [paulis[i], paulis[j]],
-                        [1, 2, 3],
-                        0,
-                        parametersHadamardSplit,
-                    )
-                    circ.save_statevector()
+    for i in range(len(paulis)):
+        tempHadamardCircuits: List[QuantumCircuit] = []
+        for j in range(i, len(paulis)):
+            if isQuantumSimulation:
+                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
+                hadamardTest(
+                    circ,
+                    [paulis[i], paulis[j]],
+                    qubits,
+                    parametersHadamardSplit,
+                )
+                circ.measure(0, 0)
+            else:
+                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
+                hadamardTest(
+                    circ,
+                    [paulis[i], paulis[j]],
+                    qubits,
+                    parametersHadamardSplit,
+                )
+                circ.save_statevector()
 
-                tempHadamardCircuits.append(circ)
-            with contextlib.redirect_stdout(io.StringIO()):
-                hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
-            transpiledHadamardCircuits.append(hadamardCircuits)
-    else:  # remove this else statement after course paper defence
-        for i in range(len(paulis)):
-            for j in range(len(paulis)):
-                if isQuantumSimulation:
-                    circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
-                    hadamardTest(
-                        circ,
-                        [paulis[i], paulis[j]],
-                        [1, 2, 3],
-                        0,
-                        parametersHadamardSplit,
-                    )
-                    circ.measure(0, 0)
-                else:
-                    circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
-                    hadamardTest(
-                        circ,
-                        [paulis[i], paulis[j]],
-                        [1, 2, 3],
-                        0,
-                        parametersHadamardSplit,
-                    )
-                    circ.save_statevector()
-
-                hadamardCircuits.append(circ)
-
+            tempHadamardCircuits.append(circ)
         with contextlib.redirect_stdout(io.StringIO()):
-            transpiledHadamardCircuits = transpile(hadamardCircuits, backend=backend)
+            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
+        transpiledHadamardCircuits.append(hadamardCircuits)
 
     for i in range(len(paulis)):
         if isQuantumSimulation:
             circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
             specialHadamardTest(
-                circ, [paulis[i]], [1, 2, 3], 0, parametersSpecialHadamardSplit, bVector
+                circ, [paulis[i]], qubits, parametersSpecialHadamardSplit, bVector
             )
             circ.measure(0, 0)
         else:
             circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
             specialHadamardTest(
-                circ, [paulis[i]], [1, 2, 3], 0, parametersSpecialHadamardSplit, bVector
+                circ, [paulis[i]], qubits, parametersSpecialHadamardSplit, bVector
             )
             circ.save_statevector()
 
@@ -743,7 +594,7 @@ def gatesToCircuit(circuit:QuantumCircuit, gateList):
 
 
 def getFixedAnsatzGates(
-    qubits: List[int], parameters: List[List[float]]
+    qubits: int, parameters: List[List[float]], offset: int = 0
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
@@ -752,28 +603,29 @@ def getFixedAnsatzGates(
     # elif qubits == 3:
     # else:
     #     # gates = [("CRy", (0, 1,0)), ("Rz", (1, 0)), ("Rx",(2, 0)), ("CCNOT", (0, 1, 2))]
-    #    
+    
     gates = []
-    for i in range(len(qubits)):
-        gates.append(("Ry", (parameters[0][i], qubits[i])))
-    gates.append(("CZ", (qubits[0], qubits[1])))
-    gates.append(("CZ", (qubits[2], qubits[0])))
+    qubitList = [i+offset for i in range(qubits)]
+    for i in range(qubits):
+        gates.append(("Ry", (parameters[0][i], qubitList[i])))
+    gates.append(("CZ", (qubitList[0], qubitList[1])))
+    gates.append(("CZ", (qubitList[2], qubitList[0])))
 
-    for i in range(len(qubits)):
-        gates.append(("Ry", (parameters[1][i], qubits[i])))
-    gates.append(("CZ", (qubits[1], qubits[2])))
-    gates.append(("CZ", (qubits[2], qubits[0])))
+    for i in range(qubits):
+        gates.append(("Ry", (parameters[1][i], qubitList[i])))
+    gates.append(("CZ", (qubitList[1], qubitList[2])))
+    gates.append(("CZ", (qubitList[2], qubitList[0])))
 
-    for i in range(len(qubits)):
-        gates.append(("Ry", (parameters[2][i], qubits[i])))
+    for i in range(qubits):
+        gates.append(("Ry", (parameters[2][i], qubitList[i])))
     return gates
 
 
-def getControlledFixedAnsatzGates(qubits: List[int], parameters: List[List[float]]):
+def getControlledFixedAnsatzGates(qubits: int, parameters: List[List[float]]):
     gates = getFixedAnsatzGates(qubits, parameters)
     controlledGates = []
     auxiliaryQubit = 0
-    auxiliaryQubit2 = len(qubits) + 1
+    auxiliaryQubit2 = qubits + 1
     for i in range(len(gates)):
         if gates[i][0] == "Ry":
             controlledGates.append(("CRy", (gates[i][1][0], (0, gates[i][1][1] + 1))))
