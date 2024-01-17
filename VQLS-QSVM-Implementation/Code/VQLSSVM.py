@@ -57,7 +57,7 @@ class VQLSSVM:
         if verbose:
             print("Output Vector:", outF)
         circ: QuantumCircuit = QuantumCircuit(qubits, qubits)
-        estimatedX: List[complex] = ansatzTest(circ, outF)
+        estimatedX: List[complex] = ansatzTest(circ, qubits, outF)
         if verbose:
             print("Output Vector after ansatz test:", estimatedX)
         estimatedNorm, estimatedVector = estimateNorm(inputMatrix, estimatedX, yVector)

@@ -70,3 +70,50 @@ def prepareDataset(normalizeValues: bool = False, dataset: str = "iris", subsetS
         min = np.min(X, axis=0)
         X = (2*X - min - max) / (max - min)
     return train_test_split(X, y, test_size=(X.shape[0]-subsetSize)/(X.shape[0]))
+
+def generateParams(qubits,layers):
+    params = []
+    if qubits != 3:
+        params.append([1 for _ in range(qubits)])
+        for _ in range(layers):
+            params.append([1 for _ in range(qubits)])
+            params.append([1 for _ in range(qubits-2)])
+    else:
+        for _ in range(qubits):
+            params.append([1 for _ in range(qubits)])
+    return params
+
+def appendMatrices(matrices,qubits):
+    return [i + 'I'*(qubits-3) for i in matrices]
+
+def splitParameters(array,qubits, alternating = False):
+    chunks = []
+    i = 0
+    take_two = False
+    
+    if alternating == False:
+        while i < len(array):
+            chunk_size = qubits
+            chunks.append(array[i:i+chunk_size])
+            i += chunk_size
+    else: 
+        chunks.append(array[i:i+qubits])
+        i += qubits
+        while i < len(array):
+            if take_two == False:
+                chunk_size = qubits
+            else:
+                chunk_size = qubits-2
+            chunks.append(array[i:i+chunk_size])
+            i += chunk_size
+            take_two = not take_two
+    return chunks
+
+
+def getTotalAnsatzParameters(qubits, layers)->int:
+    if qubits == 2:
+        raise ValueError("2 qubits not yet implemented")
+    if qubits == 3:
+        return 3*qubits
+    else:
+        return qubits + 2*layers*(qubits-1)

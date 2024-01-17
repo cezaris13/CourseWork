@@ -14,6 +14,7 @@ from itertools import product
 from qiskit.algorithms.optimizers import ADAM, SPSA, GradientDescent
 import contextlib
 import io
+from Code.Utils import splitParameters, getTotalAnsatzParameters
 
 costHistory = []
 # weightsValueHistory = []
@@ -91,15 +92,18 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
 
 
 # VLQS part
-
-
 def applyFixedAnsatz(
-    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]], offset: int = 0
+    circ: QuantumCircuit,
+    qubits: int,
+    parameters: List[List[float]],
+    offset: int = 0,
+    layers: int = 3,
+    barrier: bool = False,
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    gates = getFixedAnsatzGates(qubits, parameters,offset=offset)
-    gatesToCircuit(circ, gates)
+    gates = getFixedAnsatzGates(qubits, parameters, offset=offset, layers=layers)
+    gatesToCircuit(circ, gates, barrier=barrier)
 
 
 # Creates the Hadamard test
@@ -134,7 +138,7 @@ def hadamardTest(
 def controlB(
     circ: QuantumCircuit, auxiliaryIndex: int, qubits: int, values: List[float]
 ):
-    qubits = [i+1 for i in range(qubits)]
+    qubits = [i + 1 for i in range(qubits)]
     custom = createB(values).to_gate().control()
     circ.append(custom, [auxiliaryIndex] + qubits)
 
@@ -161,9 +165,11 @@ def controlFixedAnsatz(
     circ: QuantumCircuit,
     qubits: int,
     parameters: List[List[float]],
+    barrier: bool = False,
 ):
     gates = getControlledFixedAnsatzGates(qubits, parameters)
-    gatesToCircuit(circ, gates)
+    gatesToCircuit(circ, gates, barrier=barrier)
+
 
 # Create the controlled Hadamard test, for calculating <psi|psi>
 def specialHadamardTest(
@@ -199,7 +205,7 @@ def specialHadamardTest(
     circ.h(auxiliaryIndex)
 
 
-def calculateCostFunctionFast(parameters: list, args: list) -> float:
+def calculateCostFunction(parameters: list, args: list) -> float: # this function has to be parallelized
     cost = 0
     if len(costHistory) > 0:
         cost = costHistory[len(costHistory) - 1]
@@ -281,9 +287,9 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
             resultVectors.append(outputstate)
 
     for i in range(lenPaulis):
-        for j in range(lenPaulis-i):
+        for j in range(lenPaulis - i):
             mult = 1
-            indexArray = [i, j+i]
+            indexArray = [i, j + i]
             for index in indexArray:
                 if isQuantumSimulation:
                     outputstate = results.get_counts(bindedSpecHadamardGates[index])
@@ -291,10 +297,10 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
                     outputstate = resultVectors[index]
                 m_sum = getMSum(isQuantumSimulation, outputstate, shots)
                 mult = mult * (1 - (2 * m_sum))
-            multiply = coefficientSet[i] * coefficientSet[j+i]
+            multiply = coefficientSet[i] * coefficientSet[j + i]
             if j == 0:
                 overallSum2 += multiply * mult
-            else:   
+            else:
                 tempSum = multiply * mult
                 overallSum2 += tempSum + np.conjugate(tempSum)
     # del results
@@ -308,18 +314,7 @@ def calculateCostFunctionFast(parameters: list, args: list) -> float:
     return totalCost
 
 
-# Now, we have found that this algorithm works **in theory**.
-# I tried to run some simulations with a circuit that samples the circuit instead of calculating the probabilities numerically.
-#  Now, let's try to **sample** the quantum circuit, as a real quantum computer would do!
-# For some reason, this simulation would only converge somewhat well for a ridiculously high number of "shots" (runs of the circuit, in order to calculate the probability distribution of outcomes).
-# I think that this is mostly to do with limitations in the classical optimizer (COBYLA), due to the noisy nature of sampling a quantum circuit (a measurement with the same parameters won't always yield the same outcome).
-# Luckily, there are other optimizers that are built for noisy functions, such as SPSA, but we won't be looking into that in this tutorial.
-
-
-# Implements the entire cost function on the quantum circuit (sampling, 100000 shots) on the quantum circuit
-
-
-def getMSum(isQuantumSimulation:bool, outputstate, shots: int)-> float:
+def getMSum(isQuantumSimulation: bool, outputstate, shots: int) -> float:
     if isQuantumSimulation:
         if "1" in outputstate.keys():
             m_sum = float(outputstate["1"]) / shots
@@ -331,13 +326,13 @@ def getMSum(isQuantumSimulation:bool, outputstate, shots: int)-> float:
         for l in range(len(outputstate)):
             if l % 2 == 1:
                 n = outputstate[l] ** 2
-                m_sum += n 
+                m_sum += n
         return m_sum
 
 
 # test and minimization functions here
-def ansatzTest(circ: QuantumCircuit, outF: list):
-    applyFixedAnsatz(circ, 3, outF)
+def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
+    applyFixedAnsatz(circ, qubits, outF)
     circ.save_statevector()
 
     backend = Aer.get_backend("aer_simulator")
@@ -360,13 +355,18 @@ def minimization(
     shots: int = 100000,
     iterations: int = 200,
     verbose: bool = True,
+    layers: int = 3,
     options: dict = {},
 ) -> List[List[float]]:
     global costHistory
     costHistory = []
+    qubits = totalNeededQubits - 2
     # global weightsValueHistory
     # weightsValueHistory = []
-    x: List[float] = [float(random.randint(0, 3000)) for _ in range(0, 9)]
+    totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
+    x: List[float] = [
+        float(random.randint(0, 3000)) for _ in range(0, totalParamsNeeded)
+    ]
     x = x / np.linalg.norm(x)
     start = time.time()
     (
@@ -379,12 +379,12 @@ def minimization(
         bVector,
         totalNeededQubits,
         quantumSimulation,
+        layers,
         "aer_simulator",
     )
     end = time.time()
     if verbose:
         print("Time to prepare circuits:", end - start)
-    minimizationFunction = calculateCostFunctionFast
 
     exc = ThreadPoolExecutor(max_workers=4)
     arguments = [
@@ -402,31 +402,35 @@ def minimization(
     methods = ["ADAM", "SPSA", "GD"]
 
     if method in methods:
-        funcWrapper = lambda params: minimizationFunction(params, arguments)
+        funcWrapper = lambda params: calculateCostFunction(params, arguments)
 
         if method == "ADAM":
             lr = options["lr"] if "lr" in options else 0.05
             optimizer = ADAM(maxiter=iterations, lr=lr)
         elif method == "SPSA":
-            learning_rate = options["learning_rate"] if "learning_rate" in options else 0.2
-            perturbation = options["perturbation"] if "perturbation" in options else 0.1
-            optimizer = SPSA(maxiter=iterations,learning_rate=learning_rate,perturbation=perturbation)
-        elif method == "GD":
-            learning_rate = options["learning_rate"] if "learning_rate" in options else 0.2
-            optimizer = GradientDescent(maxiter=iterations,learning_rate=learning_rate)
-
-        out = optimizer.minimize(
-            funcWrapper,
-            x0=x
+            learning_rate = (
+                options["learning_rate"] if "learning_rate" in options else 0.2
             )
+            perturbation = options["perturbation"] if "perturbation" in options else 0.1
+            optimizer = SPSA(
+                maxiter=iterations,
+                learning_rate=learning_rate,
+                perturbation=perturbation,
+            )
+        elif method == "GD":
+            learning_rate = (
+                options["learning_rate"] if "learning_rate" in options else 0.2
+            )
+            optimizer = GradientDescent(maxiter=iterations, learning_rate=learning_rate)
+
+        out = optimizer.minimize(funcWrapper, x0=x)
         end = time.time()
         if verbose:
             print("Time to minimize:", end - start)
-            print(out)
-        return [out.x[0:3], out.x[3:6], out.x[6:9]]
-    
+        return splitParameters(out.x, qubits, alternating=qubits!=3)
+
     out = minimize(
-        minimizationFunction,
+        calculateCostFunction,
         x0=x,
         args=arguments,
         method=method,
@@ -438,35 +442,31 @@ def minimization(
     if verbose:
         print("Time to minimize:", end - start)
         print(out)
-    return [out["x"][0:3], out["x"][3:6], out["x"][6:9]]
+
+    return splitParameters(out["x"], qubits, alternating=qubits!=3)
 
 
-def prepareCircuits(
+def prepareCircuits(# circuit contruction has to be rethought, since there are some parts that are repeated
     paulis: PauliList,
     bVector: List[float],
     totalNeededQubits: int,
     isQuantumSimulation: bool,
+    layers: int,
     backendStr: str,
 ) -> (list, ParameterVector, list, ParameterVector):
     qubits = totalNeededQubits - 2
     backend = Aer.get_backend(backendStr)
+    totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
     parametersHadamard: ParameterVector = ParameterVector(
-        "parametersHadarmard", 9
+        "parametersHadarmard", totalParamsNeeded
     )  # prone to change
     parametersSpecialHadamard: ParameterVector = ParameterVector(
-        "parametersSpecialHadamard", 9
+        "parametersSpecialHadamard", totalParamsNeeded
     )
-    parametersHadamardSplit = [
-        parametersHadamard[0:3],
-        parametersHadamard[3:6],
-        parametersHadamard[6:9],
-    ]
-    parametersSpecialHadamardSplit = [
-        parametersSpecialHadamard[0:3],
-        parametersSpecialHadamard[3:6],
-        parametersSpecialHadamard[6:9],
-    ]
-
+    parametersHadamardSplit = splitParameters(parametersHadamard, qubits, alternating=qubits!=3)
+    parametersSpecialHadamardSplit = splitParameters(
+        parametersSpecialHadamard, qubits,alternating=qubits!=3
+    )
     hadamardCircuits: List[List[QuantumCircuit]] = []
     specialHadamardCircuits: List[QuantumCircuit] = []
     transpiledHadamardCircuits: List[List[QuantumCircuit]] = []
@@ -534,7 +534,7 @@ def bestMatchingSignsVector(
 ) -> List[float]:
     values: List[int] = [-1, 1]
     combos: List[float] = list(
-        product(values, repeat=len(xEstimated))
+        product(values, repeat=len(xEstimated)) # this has to be rethought, since 2^2^5 is too much
     )  # generates all 8 bit combinations
     minDifference: float = 10000000
     minDifferenceValue: List[float] = []
@@ -571,8 +571,13 @@ def estimateNorm(
 
     return estimatedNorm, v
 
-def gatesToCircuit(circuit:QuantumCircuit, gateList):
+
+def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):
+    lastGate = ""
     for i in range(len(gateList)):
+        if lastGate != gateList[i][0] and barrier:
+            circuit.barrier()
+        lastGate = gateList[i][0]
         if gateList[i][0] == "Ry":  # ("Ry", (theta, qubit))
             circuit.ry(gateList[i][1][0], gateList[i][1][1])
         elif gateList[i][0] == "Rx":  # ("Rx", (theta, qubit))
@@ -594,30 +599,45 @@ def gatesToCircuit(circuit:QuantumCircuit, gateList):
 
 
 def getFixedAnsatzGates(
-    qubits: int, parameters: List[List[float]], offset: int = 0
+    qubits: int, parameters: List[List[float]], offset: int = 0, layers: int = 3
 ):  # maybe change to 2local or EfficientSU2
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
     # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    # if qubits < 3:
-    #       raise Exception("Qubits must be at least 3")
-    # elif qubits == 3:
-    # else:
-    #     # gates = [("CRy", (0, 1,0)), ("Rz", (1, 0)), ("Rx",(2, 0)), ("CCNOT", (0, 1, 2))]
-    
+    if qubits < 3:
+        raise Exception("Qubits must be at least 3")
+
     gates = []
-    qubitList = [i+offset for i in range(qubits)]
-    for i in range(qubits):
-        gates.append(("Ry", (parameters[0][i], qubitList[i])))
-    gates.append(("CZ", (qubitList[0], qubitList[1])))
-    gates.append(("CZ", (qubitList[2], qubitList[0])))
+    qubitList = [i + offset for i in range(qubits)]
+    if qubits == 3:
+        for i in range(qubits):
+            gates.append(("Ry", (parameters[0][i], qubitList[i])))
+        gates.append(("CZ", (qubitList[0], qubitList[1])))
+        gates.append(("CZ", (qubitList[2], qubitList[0])))
 
-    for i in range(qubits):
-        gates.append(("Ry", (parameters[1][i], qubitList[i])))
-    gates.append(("CZ", (qubitList[1], qubitList[2])))
-    gates.append(("CZ", (qubitList[2], qubitList[0])))
+        for i in range(qubits):
+            gates.append(("Ry", (parameters[1][i], qubitList[i])))
+        gates.append(("CZ", (qubitList[1], qubitList[2])))
+        gates.append(("CZ", (qubitList[2], qubitList[0])))
 
-    for i in range(qubits):
-        gates.append(("Ry", (parameters[2][i], qubitList[i])))
+        for i in range(qubits):
+            gates.append(("Ry", (parameters[2][i], qubitList[i])))
+    else:
+        for i in range(qubits):
+            gates.append(("Ry", (parameters[0][i], qubitList[i])))
+
+        layer = 1
+        for i in range(layers):
+            for i in range(qubits // 2):
+                gates.append(("CZ", (qubitList[2 * i], qubitList[2 * i + 1])))
+            for i in range(qubits):
+                gates.append(("Ry", (parameters[layer][i], qubitList[i])))
+            layer = layer + 1
+            for i in range(1, qubits, 2):
+                if i + 1 < qubits:
+                    gates.append(("CZ", (qubitList[i], qubitList[i + 1])))
+            for i in range(1, qubits - 1):
+                gates.append(("Ry", (parameters[layer][i - 1], qubitList[i])))
+            layer = layer + 1
     return gates
 
 
@@ -643,6 +663,7 @@ def getControlledFixedAnsatzGates(qubits: int, parameters: List[List[float]]):
             )
 
     return controlledGates
+
 
 # def calculateWeightsAccuracy(A, bVector, qubits: int) -> float:
 #     accuracyList = []
