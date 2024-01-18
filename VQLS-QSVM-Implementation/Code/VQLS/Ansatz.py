@@ -2,7 +2,6 @@ from typing import List
 from qiskit import QuantumCircuit
 
 
-# VLQS part
 def applyFixedAnsatz(
     circ: QuantumCircuit,
     qubits: int,
@@ -28,8 +27,7 @@ def controlFixedAnsatz(
     gatesToCircuit(circ, gates, barrier=barrier)
 
 
-
-def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):
+def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):# add type
     lastGate = ""
     for i in range(len(gateList)):
         if lastGate != gateList[i][0] and barrier:
@@ -118,5 +116,4 @@ def getControlledFixedAnsatzGates(qubits: int, parameters: List[List[float]]):
             controlledGates.append(
                 ("CCNOT", (auxiliaryQubit, gates[i][1][1] + 1, auxiliaryQubit2))
             )
-
     return controlledGates

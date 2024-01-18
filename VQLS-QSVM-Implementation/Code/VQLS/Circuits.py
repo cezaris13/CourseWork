@@ -4,15 +4,14 @@ from typing import List
 import contextlib
 import io
 
-from Code.Ansatz import applyFixedAnsatz, controlFixedAnsatz
-from Code.LCU import convertMatrixIntoCircuit
-from Code.LabelVector import controlB
+from Code.VQLS.Ansatz import applyFixedAnsatz, controlFixedAnsatz
+from Code.VQLS.LCU import convertMatrixIntoCircuit
+from Code.VQLS.LabelVector import controlB
 
 
-# test and minimization functions here
 def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
     applyFixedAnsatz(circ, qubits, outF)
-    circ.save_statevector()
+    circ.save_statevector() # this might be the problem
 
     backend = Aer.get_backend("aer_simulator")
 
@@ -22,7 +21,6 @@ def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
 
     result = job.result()
     return result.get_statevector(circ, decimals=10)
-
 
 
 # Creates the Hadamard test
@@ -52,6 +50,7 @@ def hadamardTest(
     circ.barrier()
 
     circ.h(auxiliaryIndex)
+
 
 # Create the controlled Hadamard test, for calculating <psi|psi>
 def specialHadamardTest(
