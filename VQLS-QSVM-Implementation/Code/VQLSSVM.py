@@ -6,7 +6,10 @@ from typing import List
 import sys
 sys.path.append("..")
 
-from Code.VQLS import getMatrixCoeffitients, minimization, ansatzTest, estimateNorm, plotCost, getCostHistory
+from Code.VQLS import minimization, plotCost, getCostHistory
+from Code.LCU import getMatrixCoeffitients
+from Code.VQLSCircuits import ansatzTest
+from Code.NormEstimation import estimateNorm
 from Code.LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
 from ThirdParty.TensorizedPauliDecomposition import PauliDecomposition
 

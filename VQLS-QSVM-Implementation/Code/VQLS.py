@@ -1,24 +1,23 @@
 from qiskit import QuantumCircuit, Aer, transpile
-from qiskit.quantum_info import SparsePauliOp, PauliList
+from qiskit.quantum_info import PauliList
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
-from math import ceil
 from qiskit.circuit import ParameterVector
 import time
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
 import gc
-from itertools import product
 from qiskit.algorithms.optimizers import ADAM, SPSA, GradientDescent
 import contextlib
 import io
+
 from Code.Utils import splitParameters, getTotalAnsatzParameters
+from Code.VQLSCircuits import specialHadamardTest, hadamardTest
 
 costHistory = []
 # weightsValueHistory = []
-
 
 def getApproximationValue(A: np.ndarray, b: np.array, o: np.array) -> float:
     return ((b.dot(A.dot(o) / (np.linalg.norm(A.dot(o))))) ** 2).real
@@ -34,175 +33,6 @@ def plotCost():
     plt.ylabel("Cost function")
     plt.xlabel("Optimization steps")
     plt.show()
-
-
-def convertMatrixIntoCircuit(
-    circuit: QuantumCircuit,
-    paulis: PauliList,
-    controlled: bool = False,
-    auxiliaryQubit: int = 0,
-    showBarriers: bool = True,
-):
-    qubitIndexList: List[int] = []
-    qubits: int = circuit.num_qubits
-    for i in range(qubits):
-        if controlled:
-            if i != auxiliaryQubit:
-                qubitIndexList.append(i)
-        else:
-            qubitIndexList.append(i)
-
-    for p in range(len(paulis)):
-        for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]
-            # currentGate = paulis[p][len(paulis[p])-1-i]
-            if currentGate.x and currentGate.z == False:
-                if controlled:
-                    circuit.cx(auxiliaryQubit, qubitIndexList[i])
-                else:
-                    circuit.x(i)
-            elif currentGate.x and currentGate.z:
-                if controlled:
-                    circuit.cy(auxiliaryQubit, qubitIndexList[i])
-                else:
-                    circuit.y(i)
-            elif currentGate.z and currentGate.x == False:
-                if controlled:
-                    circuit.cz(auxiliaryQubit, qubitIndexList[i])
-                else:
-                    circuit.z(i)
-        if showBarriers:
-            circuit.barrier()
-
-
-def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
-    coeffs: List[float] = []
-    paulis: PauliList = pauliOp.paulis
-    for p in range(len(paulis)):
-        containsIdentity: bool = False
-        for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]
-            # currentGate = paulis[p][len(paulis[p]) - 1 - i]
-            if currentGate.x == False and currentGate.z == False:
-                containsIdentity = True
-        coeffs.append(pauliOp.coeffs[p])
-        if containsIdentity == False:
-            coeffs.append(pauliOp.coeffs[p])
-    return coeffs
-
-
-# VLQS part
-def applyFixedAnsatz(
-    circ: QuantumCircuit,
-    qubits: int,
-    parameters: List[List[float]],
-    offset: int = 0,
-    layers: int = 3,
-    barrier: bool = False,
-):  # maybe change to 2local or EfficientSU2
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    gates = getFixedAnsatzGates(qubits, parameters, offset=offset, layers=layers)
-    gatesToCircuit(circ, gates, barrier=barrier)
-
-
-# Creates the Hadamard test
-def hadamardTest(
-    circ: QuantumCircuit,
-    paulis: PauliList,
-    qubits: int,
-    parameters: List[List[float]],
-):
-    auxiliaryIndex = 0
-    circ.h(auxiliaryIndex)
-
-    circ.barrier()
-
-    applyFixedAnsatz(circ, qubits, parameters, offset=1)
-
-    circ.barrier()
-
-    convertMatrixIntoCircuit(
-        circ,
-        paulis,
-        controlled=True,
-        auxiliaryQubit=auxiliaryIndex,
-        showBarriers=False,
-    )  # change to predefined instructions
-
-    circ.barrier()
-
-    circ.h(auxiliaryIndex)
-
-
-def controlB(
-    circ: QuantumCircuit, auxiliaryIndex: int, qubits: int, values: List[float]
-):
-    qubits = [i + 1 for i in range(qubits)]
-    custom = createB(values).to_gate().control()
-    circ.append(custom, [auxiliaryIndex] + qubits)
-
-
-def createB(values: List[float]) -> QuantumCircuit:
-    qubits: int = ceil(np.log2(len(values)))
-    if len(values) != 2**qubits:
-        values = np.pad(values, (0, 2**qubits - len(values)), "constant")
-    values = values / np.linalg.norm(values)
-    circ: QuantumCircuit = QuantumCircuit(qubits)
-    circ.prepare_state(values)
-    return circ
-
-
-def getBArray(values: List[float]) -> np.array:
-    qubits: int = ceil(np.log2(len(values)))
-    if len(values) != 2**qubits:
-        values = np.pad(values, (0, 2**qubits - len(values)), "constant")
-    return np.array(values / np.linalg.norm(values))
-
-
-# Creates controlled anstaz for calculating |<b|psi>|^2 with a Hadamard test
-def controlFixedAnsatz(
-    circ: QuantumCircuit,
-    qubits: int,
-    parameters: List[List[float]],
-    barrier: bool = False,
-):
-    gates = getControlledFixedAnsatzGates(qubits, parameters)
-    gatesToCircuit(circ, gates, barrier=barrier)
-
-
-# Create the controlled Hadamard test, for calculating <psi|psi>
-def specialHadamardTest(
-    circ: QuantumCircuit,
-    paulis: PauliList,
-    qubits: int,
-    parameters: List[List[float]],
-    weights: List[float],
-):
-    auxiliaryIndex = 0
-    circ.h(auxiliaryIndex)
-
-    circ.barrier()
-
-    controlFixedAnsatz(circ, qubits, parameters)
-
-    circ.barrier()
-
-    convertMatrixIntoCircuit(
-        circ,
-        paulis,
-        controlled=True,
-        auxiliaryQubit=auxiliaryIndex,
-        showBarriers=False,
-    )
-
-    circ.barrier()
-
-    controlB(circ, auxiliaryIndex, qubits, weights)
-
-    circ.barrier()
-
-    circ.h(auxiliaryIndex)
 
 
 def calculateCostFunction(parameters: list, args: list) -> float: # this function has to be parallelized
@@ -328,21 +158,6 @@ def getMSum(isQuantumSimulation: bool, outputstate, shots: int) -> float:
                 n = outputstate[l] ** 2
                 m_sum += n
         return m_sum
-
-
-# test and minimization functions here
-def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
-    applyFixedAnsatz(circ, qubits, outF)
-    circ.save_statevector()
-
-    backend = Aer.get_backend("aer_simulator")
-
-    with contextlib.redirect_stdout(io.StringIO()):
-        t_circ = transpile(circ, backend)
-    job = backend.run(t_circ)
-
-    result = job.result()
-    return result.get_statevector(circ, decimals=10)
 
 
 def minimization(
@@ -524,146 +339,6 @@ def prepareCircuits(# circuit contruction has to be rethought, since there are s
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
     )
-
-
-# Quantum normalized vector after ansatztest can have negative or positive values,
-# so we need to check all combinations of signs, which one returns the minimum difference between b and bEstimated
-# minimum difference between b and bEstimated is the sign combination we are looking for
-def bestMatchingSignsVector(
-    A: np.ndarray, xEstimated: np.array, b: np.array
-) -> List[float]:
-    values: List[int] = [-1, 1]
-    combos: List[float] = list(
-        product(values, repeat=len(xEstimated)) # this has to be rethought, since 2^2^5 is too much
-    )  # generates all 8 bit combinations
-    minDifference: float = 10000000
-    minDifferenceValue: List[float] = []
-    for combo in combos:
-        vc: List[float] = np.multiply(
-            xEstimated, list(combo)
-        )  # multiply each element of vector with the corresponding element of combo
-        bEstimated: List[float] = A.dot(vc)  # calculate bEst
-        difference: float = np.linalg.norm(
-            bEstimated - b
-        )  # calculate difference between b and bEstimated
-        if difference < minDifference:
-            minDifference = difference
-            minDifferenceValue = vc
-    return minDifferenceValue
-
-
-# estimate norm of vector
-# once we got the sign combination, we can calculate the norm of the vector
-# norm = b.T * b / b.T * A * v
-# check this formula in the paper
-def estimateNorm(
-    A: np.ndarray, estimatedX: np.array, b: np.array, verbose: bool = False
-) -> (float, List[float]):
-    v: List[float] = bestMatchingSignsVector(A, estimatedX, b)
-    leftSide: float = b.T.dot(A.dot(v))
-    rightSide: float = b.T.dot(b)  # maybe test this with \vec{1} vector
-    estimatedNorm: float = rightSide / leftSide
-
-    if verbose:
-        print("Estimated X:", estimatedX)
-        print("Best matching signs vector:", v)
-        print("Estimated norm:", estimatedNorm)
-
-    return estimatedNorm, v
-
-
-def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):
-    lastGate = ""
-    for i in range(len(gateList)):
-        if lastGate != gateList[i][0] and barrier:
-            circuit.barrier()
-        lastGate = gateList[i][0]
-        if gateList[i][0] == "Ry":  # ("Ry", (theta, qubit))
-            circuit.ry(gateList[i][1][0], gateList[i][1][1])
-        elif gateList[i][0] == "Rx":  # ("Rx", (theta, qubit))
-            circuit.rx(gateList[i][1][0], gateList[i][1][1])
-        elif gateList[i][0] == "Rz":  # ("Rz", (theta, qubit))
-            circuit.rz(gateList[i][1][0], gateList[i][1][1])
-        elif gateList[i][0] == "CNOT":  # ("CNOT", (control, target))
-            circuit.cx(gateList[i][1][0], gateList[i][1][1])
-        elif gateList[i][0] == "CZ":  # ("CZ", (control, target))
-            circuit.cz(gateList[i][1][0], gateList[i][1][1])
-        elif gateList[i][0] == "CCNOT":  # ("CCNOT", (control1, control2, target))
-            circuit.ccx(gateList[i][1][0], gateList[i][1][1], gateList[i][1][2])
-        elif gateList[i][0] == "CRx":  # ("CRx", (theta, (control, target))
-            circuit.crx(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
-        elif gateList[i][0] == "CRy":  # ("CRy", (theta, (control, target))
-            circuit.cry(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
-        elif gateList[i][0] == "CRz":  # ("CRz", (theta, (control, target))
-            circuit.crz(gateList[i][1][0], gateList[i][1][1][0], gateList[i][1][1][1])
-
-
-def getFixedAnsatzGates(
-    qubits: int, parameters: List[List[float]], offset: int = 0, layers: int = 3
-):  # maybe change to 2local or EfficientSU2
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
-    if qubits < 3:
-        raise Exception("Qubits must be at least 3")
-
-    gates = []
-    qubitList = [i + offset for i in range(qubits)]
-    if qubits == 3:
-        for i in range(qubits):
-            gates.append(("Ry", (parameters[0][i], qubitList[i])))
-        gates.append(("CZ", (qubitList[0], qubitList[1])))
-        gates.append(("CZ", (qubitList[2], qubitList[0])))
-
-        for i in range(qubits):
-            gates.append(("Ry", (parameters[1][i], qubitList[i])))
-        gates.append(("CZ", (qubitList[1], qubitList[2])))
-        gates.append(("CZ", (qubitList[2], qubitList[0])))
-
-        for i in range(qubits):
-            gates.append(("Ry", (parameters[2][i], qubitList[i])))
-    else:
-        for i in range(qubits):
-            gates.append(("Ry", (parameters[0][i], qubitList[i])))
-
-        layer = 1
-        for i in range(layers):
-            for i in range(qubits // 2):
-                gates.append(("CZ", (qubitList[2 * i], qubitList[2 * i + 1])))
-            for i in range(qubits):
-                gates.append(("Ry", (parameters[layer][i], qubitList[i])))
-            layer = layer + 1
-            for i in range(1, qubits, 2):
-                if i + 1 < qubits:
-                    gates.append(("CZ", (qubitList[i], qubitList[i + 1])))
-            for i in range(1, qubits - 1):
-                gates.append(("Ry", (parameters[layer][i - 1], qubitList[i])))
-            layer = layer + 1
-    return gates
-
-
-def getControlledFixedAnsatzGates(qubits: int, parameters: List[List[float]]):
-    gates = getFixedAnsatzGates(qubits, parameters)
-    controlledGates = []
-    auxiliaryQubit = 0
-    auxiliaryQubit2 = qubits + 1
-    for i in range(len(gates)):
-        if gates[i][0] == "Ry":
-            controlledGates.append(("CRy", (gates[i][1][0], (0, gates[i][1][1] + 1))))
-        elif gates[i][0] == "Rx":
-            controlledGates.append(("CRx", (gates[i][1][0], (0, gates[i][1][1] + 1))))
-        elif gates[i][0] == "Rz":
-            controlledGates.append(("CRz", (gates[i][1][0], (0, gates[i][1][1] + 1))))
-        elif gates[i][0] == "CZ":
-            controlledGates.append(
-                ("CCNOT", (auxiliaryQubit, gates[i][1][1] + 1, auxiliaryQubit2))
-            )
-            controlledGates.append(("CZ", (gates[i][1][0] + 1, auxiliaryQubit2)))
-            controlledGates.append(
-                ("CCNOT", (auxiliaryQubit, gates[i][1][1] + 1, auxiliaryQubit2))
-            )
-
-    return controlledGates
-
 
 # def calculateWeightsAccuracy(A, bVector, qubits: int) -> float:
 #     accuracyList = []
