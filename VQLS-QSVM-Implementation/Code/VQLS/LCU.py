@@ -1,6 +1,8 @@
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp, PauliList
+from ThirdParty.TensorizedPauliDecomposition import PauliDecomposition
 from typing import List
+
 
 def convertMatrixIntoCircuit(
     circuit: QuantumCircuit,
@@ -56,3 +58,15 @@ def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
             coeffs.append(pauliOp.coeffs[p])
     return coeffs
 
+
+def getLCU(inputMatrix, method: str = "TPD") -> (PauliList, List[float]):
+    if method == "TPD":
+        paulis, coefficientSet = PauliDecomposition(inputMatrix, sparse=True)
+        pauliOp = SparsePauliOp(paulis, coefficientSet)
+    elif method == "sparsePauliOp":
+        pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
+    else:
+        raise ValueError("Method not implemented")
+    paulis: PauliList = pauliOp.paulis
+    coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
+    return paulis, coefficientSet

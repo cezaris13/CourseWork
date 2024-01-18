@@ -4,13 +4,13 @@ from typing import List
 import contextlib
 import io
 
-from Code.VQLS.Ansatz import applyFixedAnsatz, controlFixedAnsatz
+from Code.VQLS.Ansatz import fixedAnsatz, controlledFixedAnsatz
 from Code.VQLS.LCU import convertMatrixIntoCircuit
-from Code.VQLS.LabelVector import controlB
+from Code.VQLS.LabelVector import controlledLabelVectorCircuit
 
 
-def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
-    applyFixedAnsatz(circ, qubits, outF)
+def getSolutionVector(circ: QuantumCircuit, qubits: int, outF: list):
+    fixedAnsatz(circ, qubits, outF)
     circ.save_statevector() # this might be the problem
 
     backend = Aer.get_backend("aer_simulator")
@@ -23,7 +23,6 @@ def ansatzTest(circ: QuantumCircuit, qubits: int, outF: list):
     return result.get_statevector(circ, decimals=10)
 
 
-# Creates the Hadamard test
 def hadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
@@ -35,7 +34,7 @@ def hadamardTest(
 
     circ.barrier()
 
-    applyFixedAnsatz(circ, qubits, parameters, offset=1)
+    fixedAnsatz(circ, qubits, parameters, offset=1)
 
     circ.barrier()
 
@@ -45,14 +44,13 @@ def hadamardTest(
         controlled=True,
         auxiliaryQubit=auxiliaryIndex,
         showBarriers=False,
-    )  # change to predefined instructions
+    ) 
 
     circ.barrier()
 
     circ.h(auxiliaryIndex)
 
 
-# Create the controlled Hadamard test, for calculating <psi|psi>
 def specialHadamardTest(
     circ: QuantumCircuit,
     paulis: PauliList,
@@ -65,7 +63,7 @@ def specialHadamardTest(
 
     circ.barrier()
 
-    controlFixedAnsatz(circ, qubits, parameters)
+    controlledFixedAnsatz(circ, qubits, parameters)
 
     circ.barrier()
 
@@ -79,7 +77,7 @@ def specialHadamardTest(
 
     circ.barrier()
 
-    controlB(circ, auxiliaryIndex, qubits, weights)
+    controlledLabelVectorCircuit(circ, auxiliaryIndex, qubits, weights)
 
     circ.barrier()
 

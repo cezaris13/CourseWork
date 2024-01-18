@@ -2,7 +2,7 @@ from typing import List
 from qiskit import QuantumCircuit
 
 
-def applyFixedAnsatz(
+def fixedAnsatz(
     circ: QuantumCircuit,
     qubits: int,
     parameters: List[List[float]],
@@ -17,7 +17,7 @@ def applyFixedAnsatz(
 
 
 # Creates controlled anstaz for calculating |<b|psi>|^2 with a Hadamard test
-def controlFixedAnsatz(
+def controlledFixedAnsatz(
     circ: QuantumCircuit,
     qubits: int,
     parameters: List[List[float]],
@@ -28,7 +28,7 @@ def controlFixedAnsatz(
 
 
 def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):# add type
-    lastGate = ""
+    lastGate: str = ""
     for i in range(len(gateList)):
         if lastGate != gateList[i][0] and barrier:
             circuit.barrier()

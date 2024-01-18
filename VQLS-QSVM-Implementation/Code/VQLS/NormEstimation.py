@@ -2,7 +2,7 @@ from typing import List
 import numpy as np
 from itertools import product
 
-# Quantum normalized vector after ansatztest can have negative or positive values,
+# Quantum normalized vector after getSolutionVector can have negative or positive values,
 # so we need to check all combinations of signs, which one returns the minimum difference between b and bEstimated
 # minimum difference between b and bEstimated is the sign combination we are looking for
 def bestMatchingSignsVector(

@@ -7,11 +7,10 @@ import sys
 sys.path.append("..")
 
 from Code.VQLS.Minimization import minimization, plotCost, getCostHistory
-from Code.VQLS.LCU import getMatrixCoeffitients
-from Code.VQLS.Circuits import ansatzTest
+from Code.VQLS.Circuits import getSolutionVector
+from Code.VQLS.LCU import getLCU
 from Code.VQLS.NormEstimation import estimateNorm
 from Code.LSSVM import lssvmMatrix, prepareLabels, predict, linearKernel
-from ThirdParty.TensorizedPauliDecomposition import PauliDecomposition
 
 class VQLSSVM:
     def __init__(self, gamma: float, shots: int):
@@ -37,7 +36,7 @@ class VQLSSVM:
             print ("Condition number of the matrix: ", np.linalg.cond(inputMatrix))
         if verbose:
             print("LS-SVM Matrix:\n", inputMatrix)
-        paulis, coefficientSet = self.getLCU(inputMatrix, method=lcuMethod)
+        paulis, coefficientSet = getLCU(inputMatrix, method=lcuMethod)
         qubits = len(paulis[0])
        
         if verbose:
@@ -60,7 +59,7 @@ class VQLSSVM:
         if verbose:
             print("Output Vector:", outF)
         circ: QuantumCircuit = QuantumCircuit(qubits, qubits)
-        estimatedX: List[complex] = ansatzTest(circ, qubits, outF)
+        estimatedX: List[complex] = getSolutionVector(circ, qubits, outF)
         if verbose:
             print("Output Vector after ansatz test:", estimatedX)
         estimatedNorm, estimatedVector = estimateNorm(inputMatrix, estimatedX, yVector)
@@ -95,31 +94,13 @@ class VQLSSVM:
             if predictions[i] == yTest[i]:
                 correct += 1
         return correct / (xTest.shape[0])
-
-    def chunks(self, lst, n):
-        """Yield successive n-sized chunks from lst."""
-        for i in range(0, len(lst), n):
-            yield lst[i : i + n]
+    
 
     def plotCost(self):
         plotCost()
 
     def getCostHistory(self):
         return getCostHistory()
-
-    @staticmethod
-    def getLCU(inputMatrix, method: str = "TPD"):
-        if method == "TPD":
-            paulis, coefficientSet = PauliDecomposition(inputMatrix, sparse=True)
-            pauliOp = SparsePauliOp(paulis, coefficientSet)
-        elif method == "sparsePauliOp":
-            pauliOp: SparsePauliOp = SparsePauliOp.from_operator(inputMatrix)
-        else:
-            raise ValueError("Method not implemented")
-        paulis: PauliList = pauliOp.paulis
-        coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
-        return paulis, coefficientSet
-
 
     # def plotAccuracy(self, xTest: np.ndarray, yTest: np.array) -> int:
     #     print("Plotting accuracy")
@@ -133,7 +114,7 @@ class VQLSSVM:
     #     parameter = parameters[0]
     #     out = [parameter[0:3], parameter[3:6], parameter[6:9]]
     #     qc = QuantumCircuit(self.totalNeededQubits,self.totalNeededQubits)
-    #     weights = ansatzTest(qc,out)
+    #     weights = getSolutionVector(qc,out)
     #     print (weights)
     #     estimatedNorm, estimatedNormVector = estimateNorm(inputMatrix, weights, yTest)
     #     print(estimatedNorm)    
