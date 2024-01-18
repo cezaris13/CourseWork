@@ -14,7 +14,7 @@ import contextlib
 import io
 
 from Code.Utils import splitParameters, getTotalAnsatzParameters
-from Code.VQLSCircuits import specialHadamardTest, hadamardTest
+from Code.VQLS.Circuits import specialHadamardTest, hadamardTest
 
 costHistory = []
 # weightsValueHistory = []
@@ -340,7 +340,7 @@ def plotCost():
     plt.ylabel("Cost function")
     plt.xlabel("Optimization steps")
     plt.show()
-    
+
 # def calculateWeightsAccuracy(A, bVector, qubits: int) -> float:
 #     accuracyList = []
 #     parameters = weightsValueHistory
