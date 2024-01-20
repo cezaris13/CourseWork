@@ -78,7 +78,7 @@ def prepareDataset(
         max = np.max(X, axis=0)
         min = np.min(X, axis=0)
         X = (2 * X - min - max) / (max - min)
-    return train_test_split(X, y, test_size=(X.shape[0] - subsetSize) / (X.shape[0]))
+    return train_test_split(X, y, test_size=(X.shape[0] - subsetSize) / (X.shape[0]),stratify=y)
 
 
 def generateParams(qubits: int, layers: int) -> List[List[int]]:

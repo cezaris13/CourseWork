@@ -48,7 +48,7 @@ class VQLSSVM:
         outF: List[List[float]] = minimization(
             paulis=paulis,
             coefficientSet=coefficientSet,
-            totalNeededQubits=qubits + 2,
+            qubits=qubits,
             bVector=yVector,
             quantumSimulation=quantumSimulation,
             shots=self.shots,

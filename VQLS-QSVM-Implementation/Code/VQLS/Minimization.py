@@ -1,20 +1,17 @@
-from qiskit import QuantumCircuit, Aer, transpile
 from qiskit.quantum_info import PauliList
+from qiskit import Aer
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
-from qiskit.circuit import ParameterVector
 import time
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
 import gc
 from qiskit.algorithms.optimizers import ADAM, SPSA, GradientDescent
-import contextlib
-import io
 
 from Code.Utils import splitParameters, getTotalAnsatzParameters
-from Code.VQLS.Circuits import specialHadamardTest, hadamardTest
+from Code.VQLS.Circuits import prepareCircuits
 
 costHistory = []
 # weightsValueHistory = []
@@ -23,7 +20,7 @@ costHistory = []
 def minimization(
     paulis: PauliList,
     coefficientSet: list,
-    totalNeededQubits: int,
+    qubits: int,
     bVector: list,
     quantumSimulation: bool = True,
     method: str = "COBYLA",
@@ -35,7 +32,6 @@ def minimization(
 ) -> List[List[float]]:
     global costHistory
     costHistory = []
-    qubits = totalNeededQubits - 2
     # global weightsValueHistory
     # weightsValueHistory = []
     totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
@@ -52,7 +48,7 @@ def minimization(
     ) = prepareCircuits(
         paulis,
         bVector,
-        totalNeededQubits,
+        qubits,
         quantumSimulation,
         layers,
         "aer_simulator",
@@ -119,86 +115,6 @@ def minimization(
         print(out)
 
     return splitParameters(out["x"], qubits, alternating=qubits!=3)
-
-
-def prepareCircuits(# circuit contruction has to be rethought, since there are some parts that are repeated
-    paulis: PauliList,
-    bVector: List[float],
-    totalNeededQubits: int,
-    isQuantumSimulation: bool,
-    layers: int,
-    backendStr: str,
-) -> (list, ParameterVector, list, ParameterVector):
-    qubits = totalNeededQubits - 2
-    backend = Aer.get_backend(backendStr)
-    totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
-    parametersHadamard: ParameterVector = ParameterVector(
-        "parametersHadarmard", totalParamsNeeded
-    )  # prone to change
-    parametersSpecialHadamard: ParameterVector = ParameterVector(
-        "parametersSpecialHadamard", totalParamsNeeded
-    )
-    parametersHadamardSplit = splitParameters(parametersHadamard, qubits, alternating=qubits!=3)
-    parametersSpecialHadamardSplit = splitParameters(
-        parametersSpecialHadamard, qubits,alternating=qubits!=3
-    )
-    hadamardCircuits: List[List[QuantumCircuit]] = []
-    specialHadamardCircuits: List[QuantumCircuit] = []
-    transpiledHadamardCircuits: List[List[QuantumCircuit]] = []
-
-    for i in range(len(paulis)):
-        tempHadamardCircuits: List[QuantumCircuit] = []
-        for j in range(i, len(paulis)):
-            if isQuantumSimulation:
-                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
-                hadamardTest(
-                    circ,
-                    [paulis[i], paulis[j]],
-                    qubits,
-                    parametersHadamardSplit,
-                )
-                circ.measure(0, 0)
-            else:
-                circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
-                hadamardTest(
-                    circ,
-                    [paulis[i], paulis[j]],
-                    qubits,
-                    parametersHadamardSplit,
-                )
-                circ.save_statevector()
-
-            tempHadamardCircuits.append(circ)
-        with contextlib.redirect_stdout(io.StringIO()):
-            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
-        transpiledHadamardCircuits.append(hadamardCircuits)
-
-    for i in range(len(paulis)):
-        if isQuantumSimulation:
-            circ: QuantumCircuit = QuantumCircuit(totalNeededQubits, 1)
-            specialHadamardTest(
-                circ, [paulis[i]], qubits, parametersSpecialHadamardSplit, bVector
-            )
-            circ.measure(0, 0)
-        else:
-            circ: QuantumCircuit = QuantumCircuit(totalNeededQubits)
-            specialHadamardTest(
-                circ, [paulis[i]], qubits, parametersSpecialHadamardSplit, bVector
-            )
-            circ.save_statevector()
-
-        specialHadamardCircuits.append(circ)
-    with contextlib.redirect_stdout(io.StringIO()):
-        transpiledSpecialHadamardCircuits = transpile(
-            specialHadamardCircuits, backend=backend
-        )
-
-    return (
-        transpiledHadamardCircuits,
-        parametersHadamard,
-        transpiledSpecialHadamardCircuits,
-        parametersSpecialHadamard,
-    )
 
 
 def calculateCostFunction(parameters: list, args: list) -> float: # this function has to be parallelized
