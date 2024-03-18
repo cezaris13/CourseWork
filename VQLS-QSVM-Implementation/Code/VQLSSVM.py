@@ -24,6 +24,7 @@ class VQLSSVM:
         iterations: int = 200,
         method: str = "COBYLA",
         lcuMethod: str = "TPD",
+        # threads: int = 1,
         verbose: bool = False,
     ) -> (np.array, float):
         self.xTrain = xTrain
@@ -53,6 +54,7 @@ class VQLSSVM:
             shots=self.shots,
             method=method,
             iterations=iterations,
+            # threads=threads,
             verbose=verbose,
         )
         if verbose:

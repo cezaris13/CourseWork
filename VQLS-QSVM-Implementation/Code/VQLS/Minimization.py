@@ -28,6 +28,7 @@ def minimization(
     iterations: int = 200,
     verbose: bool = True,
     layers: int = 3,
+    # threads: int = 1,
     options: dict = {},
 ) -> List[List[float]]:
     global costHistory
@@ -57,7 +58,8 @@ def minimization(
     if verbose:
         print("Time to prepare circuits:", end - start)
 
-    exc = ThreadPoolExecutor(max_workers=4)
+    # exc = ThreadPoolExecutor(max_workers=threads)
+
     arguments = [
         coefficientSet,
         transpiledHadamardCircuits,
@@ -66,8 +68,10 @@ def minimization(
         parametersSpecialHadamard,
         quantumSimulation,
         shots,
-        exc,
+        # exc,
     ]
+    print ("Transpiled circuits length:", len(transpiledHadamardCircuits))
+    print ("Transpiled special circuits:", len(transpiledSpecialHadamardCircuits))
 
     start = time.time()
     methods = ["ADAM", "SPSA", "GD"]
@@ -133,7 +137,7 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     parametersSpecialHadamard = args[4]
     isQuantumSimulation = args[5]
     shots = args[6]
-    exc = args[7]
+    # exc = args[7]
 
     bindedHadamardGates = []
     for i in range(len(transpiledHadamardCircuits)):
@@ -150,7 +154,14 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     lenPaulis = len(bindedSpecHadamardGates)
 
     # backend.set_options(executor=exc)
-    # backend.set_options(max_job_size=1)
+    # backend.set_options(max_job_size=8)
+
+    backend.set_options(
+        max_parallel_threads=0,
+        max_parallel_experiments = 0,
+        max_parallel_shots = 1,
+        statevector_parallel_threshold = 3
+    )
 
     # we have triangular matrix:
     # X X X X X
