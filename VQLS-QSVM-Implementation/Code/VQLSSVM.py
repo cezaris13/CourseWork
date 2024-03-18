@@ -1,4 +1,3 @@
-from qiskit.quantum_info import SparsePauliOp, PauliList
 from qiskit import QuantumCircuit
 import numpy as np
 from itertools import chain

@@ -1,5 +1,5 @@
 from qiskit.quantum_info import PauliList
-from qiskit import Aer
+from qiskit_aer import Aer
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ import time
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
 import gc
-from qiskit.algorithms.optimizers import ADAM, SPSA, GradientDescent
+from qiskit_algorithms.optimizers import ADAM, SPSA, GradientDescent
 
 from Code.Utils import splitParameters, getTotalAnsatzParameters
 from Code.VQLS.Circuits import prepareCircuits
@@ -139,12 +139,12 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     for i in range(len(transpiledHadamardCircuits)):
         bindedHadamardGates.append(
             [
-                j.bind_parameters({parametersHadamard: parameters})
+                j.assign_parameters({parametersHadamard: parameters})
                 for j in transpiledHadamardCircuits[i]
             ]
         )
     bindedSpecHadamardGates = [
-        i.bind_parameters({parametersSpecialHadamard: parameters})
+        i.assign_parameters({parametersSpecialHadamard: parameters})
         for i in transpiledSpecialHadamardCircuits
     ]
     lenPaulis = len(bindedSpecHadamardGates)

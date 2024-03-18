@@ -1,4 +1,5 @@
-from qiskit import QuantumCircuit, Aer, transpile
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import Aer
 from qiskit.quantum_info import PauliList
 from qiskit.circuit import ParameterVector
 from typing import List
