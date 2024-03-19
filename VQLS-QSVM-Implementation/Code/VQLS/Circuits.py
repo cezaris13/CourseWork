@@ -9,7 +9,7 @@ import io
 from Code.VQLS.Ansatz import fixedAnsatz, controlledFixedAnsatz
 from Code.VQLS.LCU import convertMatrixIntoCircuit
 from Code.VQLS.LabelVector import controlledLabelVectorCircuit
-from Code.Utils import getTotalAnsatzParameters, splitParameters
+from Code.Utils import getTotalAnsatzParameters, splitParameters, TriangleMatrix
 
 
 def prepareCircuits(
@@ -19,7 +19,7 @@ def prepareCircuits(
     isQuantumSimulation: bool,
     layers: int,
     backendStr: str,
-) -> (list, ParameterVector, list, ParameterVector):
+) -> (TriangleMatrix, ParameterVector, list, ParameterVector):
     backend = Aer.get_backend(backendStr)
     parametersHadamard, parametersHadamardSplit = prepareParameterVector(
         "parametersHadarmard", qubits, layers
@@ -41,7 +41,7 @@ def prepareCircuits(
 
     hadamardCircuits: List[List[QuantumCircuit]] = []
     specialHadamardCircuits: List[QuantumCircuit] = []
-    transpiledHadamardCircuits: List[List[QuantumCircuit]] = []
+    transpiledHadamardCircuits: List[QuantumCircuit] = []
 
     for i in range(len(paulis)):
         tempHadamardCircuits: List[QuantumCircuit] = []
@@ -53,7 +53,7 @@ def prepareCircuits(
             tempHadamardCircuits.append(circ)
         with contextlib.redirect_stdout(io.StringIO()):
             hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
-        transpiledHadamardCircuits.append(hadamardCircuits)
+        transpiledHadamardCircuits.extend(hadamardCircuits)
 
     for i in range(len(paulis)):
         specHadamardTest = lambda circuit: specialHadamardTest(
@@ -70,8 +70,9 @@ def prepareCircuits(
             specialHadamardCircuits, backend=backend
         )
 
+    triangleMatrix = TriangleMatrix(len(paulis), transpiledHadamardCircuits)
     return (
-        transpiledHadamardCircuits,
+        triangleMatrix,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,

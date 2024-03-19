@@ -131,3 +131,37 @@ def getTotalAnsatzParameters(qubits: int, layers: int) -> int:
         return 3 * qubits
     else:
         return qubits + 2 * layers * (qubits - 1)
+
+class TriangleMatrix:
+    def __init__(self, length: int, array: np.array = None) -> None:
+        self.length = length
+        if array is not None:
+            if len(array) == int(length * (length + 1) / 2):
+                self.array = array
+            else: 
+                raise Exception("Invalid array length")
+        else:
+            self.array = np.zeros(int(length * (length + 1) / 2))
+
+    def getIndex(self, i: int, j: int) -> int:
+        if i > j:
+            raise Exception("Invalid index")
+        else:
+            return int(i*(1-i + 2 * self.length) / 2) + (j - i)
+
+    def setElement(self, i: int, j: int, value: float):
+        index = self.getIndex(i, j)
+        self.array[index] = value
+
+    def getElement(self, i: int, j: int) -> float:
+        index = self.getIndex(i, j)
+        return self.array[index]
+
+    def print(self):
+        for i in range(self.length):
+            for j in range(self.length):
+                try:
+                    print(self.getElement(i, j), end=" ")
+                except:
+                    print("*", end=" ")
+            print("")

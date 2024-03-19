@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import gc
 from qiskit_algorithms.optimizers import ADAM, SPSA, GradientDescent
 
-from Code.Utils import splitParameters, getTotalAnsatzParameters
+from Code.Utils import splitParameters, getTotalAnsatzParameters, TriangleMatrix
 from Code.VQLS.Circuits import prepareCircuits
 
 costHistory = []
@@ -28,7 +28,8 @@ def minimization(
     iterations: int = 200,
     verbose: bool = True,
     layers: int = 3,
-    # threads: int = 1,
+    threads: int = 1,
+    jobs: int = 1,
     options: dict = {},
 ) -> List[List[float]]:
     global costHistory
@@ -42,7 +43,7 @@ def minimization(
     x = x / np.linalg.norm(x)
     start = time.time()
     (
-        transpiledHadamardCircuits,
+        triangleMatrixHadamardCircuit,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
@@ -62,15 +63,17 @@ def minimization(
 
     arguments = [
         coefficientSet,
-        transpiledHadamardCircuits,
+        triangleMatrixHadamardCircuit,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
         quantumSimulation,
         shots,
+        threads,
+        jobs,
         # exc,
     ]
-    print ("Transpiled circuits length:", len(transpiledHadamardCircuits))
+    print ("Transpiled circuits length:", len(triangleMatrixHadamardCircuit.array))
     print ("Transpiled special circuits:", len(transpiledSpecialHadamardCircuits))
 
     start = time.time()
@@ -131,22 +134,21 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     backend = Aer.get_backend("aer_simulator")
 
     coefficientSet = args[0]
-    transpiledHadamardCircuits = args[1]
+    triangleMatrixHadamardCircuit = args[1]
     parametersHadamard = args[2]
     transpiledSpecialHadamardCircuits = args[3]
     parametersSpecialHadamard = args[4]
     isQuantumSimulation = args[5]
     shots = args[6]
+    threads = args[7]
+    jobs = args[8]
     # exc = args[7]
 
-    bindedHadamardGates = []
-    for i in range(len(transpiledHadamardCircuits)):
-        bindedHadamardGates.append(
-            [
-                j.assign_parameters({parametersHadamard: parameters})
-                for j in transpiledHadamardCircuits[i]
-            ]
-        )
+    bindedHadamardGates = [
+        i.assign_parameters({parametersHadamard: parameters})
+        for i in triangleMatrixHadamardCircuit.array
+    ]
+
     bindedSpecHadamardGates = [
         i.assign_parameters({parametersSpecialHadamard: parameters})
         for i in transpiledSpecialHadamardCircuits
@@ -156,12 +158,13 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     # backend.set_options(executor=exc)
     # backend.set_options(max_job_size=8)
 
-    backend.set_options(
-        max_parallel_threads=0,
-        max_parallel_experiments = 0,
-        max_parallel_shots = 1,
-        statevector_parallel_threshold = 3
-    )
+    if threads > 1:
+        backend.set_options(
+            max_parallel_threads=threads,
+            max_parallel_experiments = jobs,
+            max_parallel_shots = 0,
+            statevector_parallel_threshold = 3
+        )
 
     # we have triangular matrix:
     # X X X X X
@@ -171,24 +174,30 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     # . . . . X
     # lower triangular matrix is calculated using this formula: <0|V(a)^d A_n^d A_m V(a)|0> = (<0|V(a)^d A_m^d A_n V(a)|0>) conjugate
     # c_n conj c_m <0|V(a)^d A_n^d A_m V(a)|0> = ( c_n conj c_m <0|V(a)^d A_m^d A_n V(a)|0>) conjugate
+
+    if isQuantumSimulation:
+        results = backend.run(bindedHadamardGates, shots=shots).result()
+    else:
+        resultVectors = []
+        for i in range(lenPaulis*(lenPaulis+1)//2):
+            result = backend.run(bindedHadamardGates[i]).result()
+            outputstate = np.real(
+                result.get_statevector(bindedHadamardGates[i], decimals=100)
+            )
+            resultVectors.append(outputstate)
+        triangleResultVectors = TriangleMatrix(lenPaulis, resultVectors)
+    bindedHadamardGatesTriangle = TriangleMatrix(lenPaulis, bindedHadamardGates)
+
     for i in range(lenPaulis):
         for j in range(lenPaulis - i):
             if isQuantumSimulation:
-                results = backend.run(bindedHadamardGates[i][j], shots=shots).result()
-                outputstate = results.get_counts()
+                outputstate = results.get_counts(bindedHadamardGatesTriangle.getElement(i, i+ j))
             else:
-                job = backend.run(bindedHadamardGates[i][j])
-                result = job.result()
-                outputstate = np.real(
-                    result.get_statevector(bindedHadamardGates[i][j], decimals=100)
-                )
-
+                outputstate = triangleResultVectors.getElement(i, i + j)
             m_sum = getMSum(isQuantumSimulation, outputstate, shots)
             multiply = coefficientSet[i] * coefficientSet[i + j]
 
-            if (
-                j == 0
-            ):  # since the main diagional is not counted twice and  the list first element is the main diagional
+            if j == 0:  # since the main diagional is not counted twice and  the list first element is the main diagional
                 overallSum1 += multiply * (1 - (2 * m_sum))
             else:
                 temp = multiply * (1 - (2 * m_sum))
@@ -202,8 +211,7 @@ def calculateCostFunction(parameters: list, args: list) -> float: # this functio
     else:
         resultVectors = []
         for i in range(lenPaulis):
-            job = backend.run(bindedSpecHadamardGates[i])
-            result = job.result()
+            result = backend.run(bindedSpecHadamardGates[i]).result()
             outputstate = np.real(
                 result.get_statevector(bindedSpecHadamardGates[i], decimals=100)
             )

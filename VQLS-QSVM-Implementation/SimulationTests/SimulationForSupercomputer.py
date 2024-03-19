@@ -60,7 +60,7 @@ def main(qubits: int, iterations: int, trainIterations: int, datasets: list, sub
         print(i,"th iteration")
         for dataset in datasets:
             print("Dataset:",dataset)
-            cost,accuracy,svmAccuracy = collectTrainData(dataset, False)
+            cost,accuracy,svmAccuracy = collectTrainData(dataset, True)
             costs[dataset].append(cost)
             accuracies[dataset].append(accuracy)
             accuraciesSVM[dataset].append(svmAccuracy)
