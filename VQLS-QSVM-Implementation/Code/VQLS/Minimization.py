@@ -6,15 +6,12 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import time
 from typing import List
-from concurrent.futures import ThreadPoolExecutor
-import gc
 from qiskit_algorithms.optimizers import ADAM, SPSA, GradientDescent
 
 from Code.Utils import splitParameters, getTotalAnsatzParameters, TriangleMatrix
 from Code.VQLS.Circuits import prepareCircuits
 
 costHistory = []
-# weightsValueHistory = []
 
 
 def minimization(
@@ -34,8 +31,6 @@ def minimization(
 ) -> List[List[float]]:
     global costHistory
     costHistory = []
-    # global weightsValueHistory
-    # weightsValueHistory = []
     totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
     x: List[float] = [
         float(random.randint(0, 3000)) for _ in range(0, totalParamsNeeded)
@@ -43,7 +38,7 @@ def minimization(
     x = x / np.linalg.norm(x)
     start = time.time()
     (
-        triangleMatrixHadamardCircuit,
+        transpiledHadamardCircuit,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
@@ -59,24 +54,26 @@ def minimization(
     if verbose:
         print("Time to prepare circuits:", end - start)
 
-    # exc = ThreadPoolExecutor(max_workers=threads)
+    backend = Aer.get_backend("aer_simulator")
+
+    if threads != 1:
+        backend.set_options(
+            max_parallel_threads=threads,
+            max_parallel_experiments=jobs,
+            max_parallel_shots=0,
+            statevector_parallel_threshold=3
+        )
 
     arguments = [
         coefficientSet,
-        triangleMatrixHadamardCircuit,
+        transpiledHadamardCircuit,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
         quantumSimulation,
         shots,
-        threads,
-        jobs,
-        # exc,
+        backend
     ]
-    print("Transpiled circuits length:", len(
-        triangleMatrixHadamardCircuit.array))
-    print("Transpiled special circuits:", len(
-        transpiledSpecialHadamardCircuits))
 
     start = time.time()
     methods = ["ADAM", "SPSA", "GD"]
@@ -137,31 +134,20 @@ def calculateCostFunction(parameters: list, args: list) -> float:
     overallSum2: float = 0
 
     coefficientSet = args[0]
-    triangleMatrixHadamardCircuit = args[1]
+    transpiledHadamardCircuit = args[1]
     parametersHadamard = args[2]
     transpiledSpecialHadamardCircuits = args[3]
     parametersSpecialHadamard = args[4]
     isQuantumSimulation = args[5]
     shots = args[6]
-    threads = args[7]
-    jobs = args[8]
-    # exc = args[7]
+    backend = args[7]
 
-    bindedHadamardGates = [
-        i.assign_parameters({parametersHadamard: parameters})
-        for i in triangleMatrixHadamardCircuit.array
-    ]
-
-    bindedSpecHadamardGates = [
-        i.assign_parameters({parametersSpecialHadamard: parameters})
-        for i in transpiledSpecialHadamardCircuits
-    ]
+    bindedHadamardGates = list(map(lambda x: x.assign_parameters({ parametersHadamard: parameters}), transpiledHadamardCircuit))
+    bindedSpecHadamardGates = list(map(lambda x: x.assign_parameters({ parametersSpecialHadamard: parameters}), transpiledSpecialHadamardCircuits))
     lenPaulis = len(bindedSpecHadamardGates)
+    resultsHadamard, resultsSpecialHadamard = runExperiments(bindedHadamardGates, bindedSpecHadamardGates, isQuantumSimulation, shots, backend)
+    bindedHadamardGatesTriangle = TriangleMatrix(lenPaulis, resultsHadamard)
 
-    # backend.set_options(executor=exc)
-    # backend.set_options(max_job_size=8)
-
-    resultsHadamard, resultsSpecialHadamard, resultVectors, triangleResultVectors, bindedHadamardGatesTriangle = runExperiments(shots, isQuantumSimulation, lenPaulis, threads, jobs, bindedHadamardGates, bindedSpecHadamardGates)
     # we have triangular matrix:
     # X X X X X
     # . X X X X
@@ -170,14 +156,9 @@ def calculateCostFunction(parameters: list, args: list) -> float:
     # . . . . X
     # lower triangular matrix is calculated using this formula: <0|V(a)^d A_n^d A_m V(a)|0> = (<0|V(a)^d A_m^d A_n V(a)|0>) conjugate
     # c_n conj c_m <0|V(a)^d A_n^d A_m V(a)|0> = ( c_n conj c_m <0|V(a)^d A_m^d A_n V(a)|0>) conjugate
-
     for i in range(lenPaulis):
         for j in range(lenPaulis - i):
-            if isQuantumSimulation:
-                outputstate = resultsHadamard.get_counts(
-                    bindedHadamardGatesTriangle.getElement(i, i + j))
-            else:
-                outputstate = triangleResultVectors.getElement(i, i + j)
+            outputstate = bindedHadamardGatesTriangle.getElement(i, i + j)
             m_sum = getMSum(isQuantumSimulation, outputstate, shots)
             multiply = coefficientSet[i] * coefficientSet[i + j]
 
@@ -187,19 +168,12 @@ def calculateCostFunction(parameters: list, args: list) -> float:
                 temp = multiply * (1 - (2 * m_sum))
                 overallSum1 += np.conjugate(temp) + temp
 
-    # del results
-    # del bindedHadamardGates
-    # gc.collect()
-
     for i in range(lenPaulis):
         for j in range(lenPaulis - i):
             mult = 1
             indexArray = [i, j + i]
             for index in indexArray:
-                if isQuantumSimulation:
-                    outputstate = resultsSpecialHadamard[index]
-                else:
-                    outputstate = resultVectors[index]
+                outputstate = resultsSpecialHadamard[index]
                 m_sum = getMSum(isQuantumSimulation, outputstate, shots)
                 mult = mult * (1 - (2 * m_sum))
             multiply = coefficientSet[i] * coefficientSet[j + i]
@@ -208,56 +182,24 @@ def calculateCostFunction(parameters: list, args: list) -> float:
             else:
                 tempSum = multiply * mult
                 overallSum2 += tempSum + np.conjugate(tempSum)
-    # del results
-    # del bindedSpecHadamardGates
-
-    # gc.collect()
 
     totalCost = 1 - float(overallSum2.real / overallSum1.real)
     costHistory.append(totalCost)
-    # weightsValueHistory.append(parameters)
     return totalCost
 
-
-def runExperiments(shots: int, isQuantumSimulation: bool, lenPaulis: int, threads: int, jobs: int, bindedHadamardGates, bindedSpecHadamardGates):
-    backend = Aer.get_backend("aer_simulator")
-
-    if threads > 1:
-        backend.set_options(
-            max_parallel_threads=threads,
-            max_parallel_experiments=jobs,
-            max_parallel_shots=0,
-            statevector_parallel_threshold=3
-        )
-
-    resultsHadamard = []
-    resultsSpecialHadamard = []
-    resultVectors = []
-    triangleResultVectors = []
+def runExperiments(bindedHadamardGates, bindedSpecHadamardGates, isQuantumSimulation: bool, shots: int, backend):
+    gates = bindedHadamardGates + bindedSpecHadamardGates
 
     if isQuantumSimulation:
-        resultsHadamard = backend.run(bindedHadamardGates, shots=shots).result()
-        # result = [ np.real(resultsHadamard.get_statevector(gate, decimals=100)) for gate in bindedHadamardGates]
-        # triangleResultVectors = TriangleMatrix(lenPaulis, resultVectors)
-        resultsSpecialHadamard = backend.run(bindedSpecHadamardGates, shots=shots).result()
-        resultsSpecialHadamard = [resultsSpecialHadamard.get_counts(gate) for gate in bindedSpecHadamardGates]
-        # bindedGates = bindedHadamardGates + bindedSpecHadamardGates # combine list of gates in order to run in parallel faster
-        # results = backend.run(bindedGates, shots=shots).result()
-        # resultsHadamard = results[:lenPaulis*(lenPaulis+1)//2]
-        # resultsSpecialHadamard = results[lenPaulis*(lenPaulis+1)//2:] # prideti get counts here?
+        results = backend.run(gates, shots=shots).result()
+        resultsHadamard = list(map(lambda x: results.get_counts(x), bindedHadamardGates))
+        resultsSpecialHadamard = list(map(lambda x: results.get_counts(x), bindedSpecHadamardGates))
     else:
-        resultsHadamard = backend.run(bindedHadamardGates).result()
-        resultsSpecialHadamard = backend.run(bindedSpecHadamardGates).result()
-        resultVectors = [ np.real(resultsHadamard.get_statevector(gate, decimals=100)) for gate in bindedHadamardGates]
-        triangleResultVectors = TriangleMatrix(lenPaulis, resultVectors)
-        resultVectors = [ np.real(resultsSpecialHadamard.get_statevector(gate, decimals=100)) for gate in bindedSpecHadamardGates]
-        # bindedGates = bindedHadamardGates + bindedSpecHadamardGates
-        # results = backend.run(bindedGates).result()
-        # resultsHadamard = results[:lenPaulis]
-        # resultsSpecialHadamard = results[lenPaulis:]
-    bindedHadamardGatesTriangle = TriangleMatrix(lenPaulis, bindedHadamardGates)
+        results = backend.run(gates).result()
+        resultsHadamard = list(map(lambda x: np.real(results.get_statevector(x, decimals=100)), bindedHadamardGates))
+        resultsSpecialHadamard = list(map(lambda x: np.real(results.get_statevector(x, decimals=100)), bindedSpecHadamardGates))
 
-    return resultsHadamard, resultsSpecialHadamard, resultVectors, triangleResultVectors, bindedHadamardGatesTriangle
+    return resultsHadamard, resultsSpecialHadamard
 
 def getMSum(isQuantumSimulation: bool, outputstate, shots: int) -> float:
     if isQuantumSimulation:
@@ -289,31 +231,3 @@ def plotCost():
     plt.ylabel("Cost function")
     plt.xlabel("Optimization steps")
     plt.show()
-
-# def calculateWeightsAccuracy(A, bVector, qubits: int) -> float:
-#     accuracyList = []
-#     parameters = weightsValueHistory
-#     for parameter in parameters:
-#         out = [parameter[0:3], parameter[3:6], parameter[6:9]]
-#         qc = QuantumCircuit(qubits, qubits)
-#         weights = ansatzTest(qc, out)
-#         estimatedNorm, estimatedNormVector = estimateNorm(A, weights, bVector)
-#         weightsVector = estimatedNorm * estimatedNormVector
-#         # weights, b = weightsVector[1:], weightsVector[0]
-#         predictions = np.dot(A, weightsVector)
-#         print(predictions)
-#         print(bVector)
-#         accuracyList.append(accuracy(bVector, predictions))
-#     return accuracyList
-
-
-# def getWeightsValueHistory():
-#     return weightsValueHistory
-
-
-# def plotAccuracy(listOfAccuracies: List[float]):
-#     plt.style.use("seaborn-v0_8")
-#     plt.plot(listOfAccuracies, "g")
-#     plt.ylabel("Accuracy")
-#     plt.xlabel("Optimization steps")
-#     plt.show()

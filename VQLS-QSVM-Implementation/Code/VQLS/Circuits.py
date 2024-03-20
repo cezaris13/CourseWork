@@ -19,7 +19,7 @@ def prepareCircuits(
     isQuantumSimulation: bool,
     layers: int,
     backendStr: str,
-) -> (TriangleMatrix, ParameterVector, list, ParameterVector):
+) -> (list, ParameterVector, list, ParameterVector):
     backend = Aer.get_backend(backendStr)
     parametersHadamard, parametersHadamardSplit = prepareParameterVector(
         "parametersHadarmard", qubits, layers
@@ -70,9 +70,8 @@ def prepareCircuits(
             specialHadamardCircuits, backend=backend
         )
 
-    triangleMatrix = TriangleMatrix(len(paulis), transpiledHadamardCircuits)
     return (
-        triangleMatrix,
+        transpiledHadamardCircuits,
         parametersHadamard,
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
