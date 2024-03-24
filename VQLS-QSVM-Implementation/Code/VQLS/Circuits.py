@@ -5,11 +5,12 @@ from qiskit.circuit import ParameterVector
 from typing import List
 import contextlib
 import io
+import threading
 
 from Code.VQLS.Ansatz import fixedAnsatz, controlledFixedAnsatz
 from Code.VQLS.LCU import convertMatrixIntoCircuit
 from Code.VQLS.LabelVector import controlledLabelVectorCircuit
-from Code.Utils import getTotalAnsatzParameters, splitParameters, TriangleMatrix
+from Code.Utils import getTotalAnsatzParameters, splitParameters, prepareBackend
 
 
 def prepareCircuits(
@@ -18,15 +19,32 @@ def prepareCircuits(
     qubits: int,
     isQuantumSimulation: bool,
     layers: int,
-    backendStr: str,
+    threads: int,
+    jobs: int,
+    threading = False,
 ) -> (list, ParameterVector, list, ParameterVector):
-    backend = Aer.get_backend(backendStr)
-    parametersHadamard, parametersHadamardSplit = prepareParameterVector(
-        "parametersHadarmard", qubits, layers
-    )
-    parametersSpecialHadamard, parametersSpecialHadamardSplit = prepareParameterVector(
-        "parametersSpecialHadamard", qubits, layers
-    )
+    backend = prepareBackend(threads, jobs)
+    if threading:
+        parameterVectorThread = ReturnValueThread(target=lambda: prepareParameterVector(
+            "parametersHadarmard", qubits, layers
+        ))
+
+        parameterSpecialVectorThread = ReturnValueThread(target=lambda: prepareParameterVector(
+            "parametersSpecialHadamard", qubits, layers))
+
+
+        parameterVectorThread.start()
+        parameterSpecialVectorThread.start()
+
+        parametersHadamard, parametersHadamardSplit = parameterVectorThread.join()
+        parametersSpecialHadamard, parametersSpecialHadamardSplit = parameterSpecialVectorThread.join()
+    else:
+        parametersHadamard, parametersHadamardSplit = prepareParameterVector(
+          "parametersHadarmard", qubits, layers
+        )
+        parametersSpecialHadamard, parametersSpecialHadamardSplit = prepareParameterVector(
+            "parametersSpecialHadamard", qubits, layers
+        )
 
     labelVectorCircuit = QuantumCircuit(qubits + 1)
     controlledLabelVectorCircuit(labelVectorCircuit, 0, qubits, bVector)
@@ -39,36 +57,22 @@ def prepareCircuits(
         controlledFixedAnsatzCircuit, qubits, parametersSpecialHadamardSplit
     )
 
-    hadamardCircuits: List[List[QuantumCircuit]] = []
-    specialHadamardCircuits: List[QuantumCircuit] = []
-    transpiledHadamardCircuits: List[QuantumCircuit] = []
+    if threading:
+        hadamardCircuitsThread = ReturnValueThread(target=lambda: prepareHadamardTestCircuits(
+            paulis, fixedAnsatzCircuit, qubits, isQuantumSimulation, backend
+        ))
 
-    for i in range(len(paulis)):
-        tempHadamardCircuits: List[QuantumCircuit] = []
-        for j in range(i, len(paulis)):
-            hadamardTest1 = lambda circuit: hadamardTest(
-                circuit, [paulis[i], paulis[j]], fixedAnsatzCircuit
-            )
-            circ = constructCircuit(isQuantumSimulation, qubits + 1, hadamardTest1)
-            tempHadamardCircuits.append(circ)
-        with contextlib.redirect_stdout(io.StringIO()):
-            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
-        transpiledHadamardCircuits.extend(hadamardCircuits)
+        specialHadamardCircuitsThread = ReturnValueThread(target=lambda: prepareSpecialHadamardTestCircuits(
+            paulis, controlledFixedAnsatzCircuit, labelVectorCircuit, qubits, isQuantumSimulation, backend
+        ))
 
-    for i in range(len(paulis)):
-        specHadamardTest = lambda circuit: specialHadamardTest(
-            circuit,
-            [paulis[i]],
-            controlledFixedAnsatzCircuit,
-            labelVectorCircuit,
-        )
-        circ = constructCircuit(isQuantumSimulation, qubits + 2, specHadamardTest)
-        specialHadamardCircuits.append(circ)
-
-    with contextlib.redirect_stdout(io.StringIO()):
-        transpiledSpecialHadamardCircuits = transpile(
-            specialHadamardCircuits, backend=backend
-        )
+        hadamardCircuitsThread.start()
+        specialHadamardCircuitsThread.start()
+        transpiledHadamardCircuits = hadamardCircuitsThread.join()
+        transpiledSpecialHadamardCircuits = specialHadamardCircuitsThread.join()
+    else:
+        transpiledHadamardCircuits = prepareHadamardTestCircuits(paulis, fixedAnsatzCircuit, qubits, isQuantumSimulation, backend)
+        transpiledSpecialHadamardCircuits = prepareSpecialHadamardTestCircuits(paulis, controlledFixedAnsatzCircuit, labelVectorCircuit, qubits, isQuantumSimulation, backend)
 
     return (
         transpiledHadamardCircuits,
@@ -76,6 +80,42 @@ def prepareCircuits(
         transpiledSpecialHadamardCircuits,
         parametersSpecialHadamard,
     )
+
+
+def prepareHadamardTestCircuits(paulis, fixedAnsatzCircuit, qubits, isQuantumSimulation, backend):
+    transpiledHadamardCircuits: List[QuantumCircuit] = []
+    for i in range(len(paulis)):
+        tempHadamardCircuits: List[QuantumCircuit] = []
+        for j in range(i, len(paulis)):
+            def hadamardTest1(circuit): return hadamardTest(
+                circuit, [paulis[i], paulis[j]], fixedAnsatzCircuit
+            )
+            circ = constructCircuit(isQuantumSimulation, qubits + 1, hadamardTest1)
+            tempHadamardCircuits.append(circ)
+        with contextlib.redirect_stdout(io.StringIO()):
+            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend, optimization_level=1)
+        transpiledHadamardCircuits.extend(hadamardCircuits)
+    return transpiledHadamardCircuits
+
+
+def prepareSpecialHadamardTestCircuits(paulis, controlledFixedAnsatzCircuit, labelVectorCircuit, qubits, isQuantumSimulation, backend):
+    specialHadamardCircuits: List[QuantumCircuit] = []
+    for i in range(len(paulis)):
+        def specHadamardTest(circuit): return specialHadamardTest(
+            circuit,
+            [paulis[i]],
+            controlledFixedAnsatzCircuit,
+            labelVectorCircuit,
+        )
+        circ = constructCircuit(isQuantumSimulation,
+                                qubits + 2, specHadamardTest)
+        specialHadamardCircuits.append(circ)
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        transpiledSpecialHadamardCircuits = transpile(
+            specialHadamardCircuits, backend=backend, optimization_level=1
+        )
+    return transpiledSpecialHadamardCircuits
 
 
 def getSolutionVector(circ: QuantumCircuit, qubits: int, outF: list):
@@ -131,7 +171,8 @@ def specialHadamardTest(
     circ.barrier()
 
     circ.append(
-        controlledFixedAnsatzCircuit, range(controlledFixedAnsatzCircuit.num_qubits)
+        controlledFixedAnsatzCircuit, range(
+            controlledFixedAnsatzCircuit.num_qubits)
     )
 
     circ.barrier()
@@ -146,7 +187,8 @@ def specialHadamardTest(
 
     circ.barrier()
 
-    circ.append(controlLabelVectorCircuit, range(controlLabelVectorCircuit.num_qubits))
+    circ.append(controlLabelVectorCircuit, range(
+        controlLabelVectorCircuit.num_qubits))
 
     circ.barrier()
 
@@ -172,3 +214,24 @@ def prepareParameterVector(name: str, qubits: int, layers: int):
     totalParamsNeeded: int = getTotalAnsatzParameters(qubits, layers)
     parameters: ParameterVector = ParameterVector(name, totalParamsNeeded)
     return parameters, splitParameters(parameters, qubits, alternating=qubits != 3)
+
+
+import threading
+import sys
+
+class ReturnValueThread(threading.Thread):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.result = None
+
+    def run(self):
+        if self._target is None:
+            return  # could alternatively raise an exception, depends on the use case
+        try:
+            self.result = self._target(*self._args, **self._kwargs)
+        except Exception as exc:
+            print(f'{type(exc).__name__}: {exc}', file=sys.stderr)  # properly handle the exception
+
+    def join(self, *args, **kwargs):
+        super().join(*args, **kwargs)
+        return self.result

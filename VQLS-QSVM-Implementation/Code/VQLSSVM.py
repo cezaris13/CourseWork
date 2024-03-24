@@ -25,6 +25,7 @@ class VQLSSVM:
         method: str = "COBYLA",
         lcuMethod: str = "TPD",
         threads: int = 1,
+        circuitConstructionThreading: bool = False,
         jobs: int = 1,
         verbose: bool = False,
     ) -> (np.array, float):
@@ -58,6 +59,7 @@ class VQLSSVM:
             threads=threads,
             jobs= jobs,
             verbose=verbose,
+            threadingForCircuits=circuitConstructionThreading,
         )
         if verbose:
             print("Output Vector:", outF)

@@ -8,7 +8,7 @@ import time
 from typing import List
 from qiskit_algorithms.optimizers import ADAM, SPSA, GradientDescent
 
-from Code.Utils import splitParameters, getTotalAnsatzParameters, TriangleMatrix
+from Code.Utils import splitParameters, getTotalAnsatzParameters, TriangleMatrix, prepareBackend
 from Code.VQLS.Circuits import prepareCircuits
 
 costHistory = []
@@ -28,14 +28,11 @@ def minimization(
     threads: int = 1,
     jobs: int = 1,
     options: dict = {},
+    threadingForCircuits: bool = False,
 ) -> List[List[float]]:
     global costHistory
     costHistory = []
-    totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
-    x: List[float] = [
-        float(random.randint(0, 3000)) for _ in range(0, totalParamsNeeded)
-    ]
-    x = x / np.linalg.norm(x)
+
     start = time.time()
     (
         transpiledHadamardCircuit,
@@ -48,21 +45,15 @@ def minimization(
         qubits,
         quantumSimulation,
         layers,
-        "aer_simulator",
+        threads=threads,
+        jobs=jobs, 
+        threading=threadingForCircuits,
     )
     end = time.time()
     if verbose:
         print("Time to prepare circuits:", end - start)
 
-    backend = Aer.get_backend("aer_simulator")
-
-    if threads != 1:
-        backend.set_options(
-            max_parallel_threads=threads,
-            max_parallel_experiments=jobs,
-            max_parallel_shots=0,
-            statevector_parallel_threshold=3
-        )
+    backend = prepareBackend(threads, jobs)
 
     arguments = [
         coefficientSet,
@@ -76,6 +67,22 @@ def minimization(
     ]
 
     start = time.time()
+    circuitParameters = runMinimization(method, arguments, options, iterations, qubits, layers)
+    end = time.time()
+
+    if verbose:
+        print("Time to minimize:", end - start)
+
+    return splitParameters(circuitParameters, qubits, alternating=qubits != 3)
+
+
+def runMinimization(method:str, arguments: list, options: dict, iterations: int, qubits: int, layers: int):
+    totalParamsNeeded = getTotalAnsatzParameters(qubits, layers)
+    x: List[float] = [
+        float(random.randint(0, 3000)) for _ in range(0, totalParamsNeeded)
+    ]
+    x = x / np.linalg.norm(x)
+
     methods = ["ADAM", "SPSA", "GD"]
 
     if method in methods:
@@ -103,10 +110,7 @@ def minimization(
                 maxiter=iterations, learning_rate=learning_rate)
 
         out = optimizer.minimize(funcWrapper, x0=x)
-        end = time.time()
-        if verbose:
-            print("Time to minimize:", end - start)
-        return splitParameters(out.x, qubits, alternating=qubits != 3)
+        return out.x
 
     out = minimize(
         calculateCostFunction,
@@ -116,13 +120,7 @@ def minimization(
         options={"maxiter": iterations},
     )
 
-    end = time.time()
-
-    if verbose:
-        print("Time to minimize:", end - start)
-        print(out)
-
-    return splitParameters(out["x"], qubits, alternating=qubits != 3)
+    return out["x"]
 
 
 def calculateCostFunction(parameters: list, args: list) -> float:
@@ -187,6 +185,7 @@ def calculateCostFunction(parameters: list, args: list) -> float:
     costHistory.append(totalCost)
     return totalCost
 
+
 def runExperiments(bindedHadamardGates, bindedSpecHadamardGates, isQuantumSimulation: bool, shots: int, backend):
     gates = bindedHadamardGates + bindedSpecHadamardGates
 
@@ -200,6 +199,7 @@ def runExperiments(bindedHadamardGates, bindedSpecHadamardGates, isQuantumSimula
         resultsSpecialHadamard = list(map(lambda x: np.real(results.get_statevector(x, decimals=100)), bindedSpecHadamardGates))
 
     return resultsHadamard, resultsSpecialHadamard
+
 
 def getMSum(isQuantumSimulation: bool, outputstate, shots: int) -> float:
     if isQuantumSimulation:

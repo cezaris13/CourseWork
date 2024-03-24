@@ -2,7 +2,7 @@ import numpy as np
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from typing import List
-
+from qiskit_aer import Aer
 
 def zGate() -> np.array:
     return np.array([[1, 0], [0, -1]])
@@ -165,3 +165,22 @@ class TriangleMatrix:
                 except:
                     print("*", end=" ")
             print("")
+
+
+def prepareBackend(threads: int, jobs: int):
+    # exc = ThreadPoolExecutor(max_workers=threads)
+    backend = Aer.get_backend("aer_simulator")
+
+    # if threads != 1:
+    #     backend.set_options(executor=exc,
+    #                         max_job_size=jobs)
+        
+    if threads != 1:
+        backend.set_options(
+            max_parallel_threads=threads,
+            max_parallel_experiments=jobs,
+            max_parallel_shots=0,
+            statevector_parallel_threshold=3
+        )
+
+    return backend
