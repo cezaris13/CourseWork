@@ -40,23 +40,29 @@ def prepareCircuits(
         parametersSpecialHadamard, parametersSpecialHadamardSplit = parameterSpecialVectorThread.join()
     else:
         parametersHadamard, parametersHadamardSplit = prepareParameterVector(
-          "parametersHadarmard", qubits, layers
+            "parametersHadarmard", qubits, layers
         )
+        print("parametersHadamard prepared")
         parametersSpecialHadamard, parametersSpecialHadamardSplit = prepareParameterVector(
             "parametersSpecialHadamard", qubits, layers
         )
 
+    print("parametersSpecialHadamard prepared")
+
     labelVectorCircuit = QuantumCircuit(qubits + 1)
     controlledLabelVectorCircuit(labelVectorCircuit, 0, qubits, bVector)
 
+    print("labelVectorCircuit prepared")
     fixedAnsatzCircuit = QuantumCircuit(qubits + 1)
     fixedAnsatz(fixedAnsatzCircuit, qubits, parametersHadamardSplit, offset=1)
+    print("fixedAnsatzCircuit prepared")
 
     controlledFixedAnsatzCircuit = QuantumCircuit(qubits + 2)
     controlledFixedAnsatz(
         controlledFixedAnsatzCircuit, qubits, parametersSpecialHadamardSplit
     )
-
+    print("controlledFixedAnsatzCircuit prepared")
+    # with contextlib.redirect_stdout(io.StringIO()):
     if threading:
         hadamardCircuitsThread = ReturnValueThread(target=lambda: prepareHadamardTestCircuits(
             paulis, fixedAnsatzCircuit, qubits, isQuantumSimulation, backend
@@ -72,7 +78,9 @@ def prepareCircuits(
         transpiledSpecialHadamardCircuits = specialHadamardCircuitsThread.join()
     else:
         transpiledHadamardCircuits = prepareHadamardTestCircuits(paulis, fixedAnsatzCircuit, qubits, isQuantumSimulation, backend)
+        print("transpiledHadamardCircuits prepared")
         transpiledSpecialHadamardCircuits = prepareSpecialHadamardTestCircuits(paulis, controlledFixedAnsatzCircuit, labelVectorCircuit, qubits, isQuantumSimulation, backend)
+        print("transpiledSpecialHadamardCircuits prepared")
 
     return (
         transpiledHadamardCircuits,
@@ -92,8 +100,7 @@ def prepareHadamardTestCircuits(paulis, fixedAnsatzCircuit, qubits, isQuantumSim
             )
             circ = constructCircuit(isQuantumSimulation, qubits + 1, hadamardTest1)
             tempHadamardCircuits.append(circ)
-        with contextlib.redirect_stdout(io.StringIO()):
-            hadamardCircuits = transpile(tempHadamardCircuits, backend=backend, optimization_level=1)
+        hadamardCircuits = transpile(tempHadamardCircuits, backend=backend)
         transpiledHadamardCircuits.extend(hadamardCircuits)
     return transpiledHadamardCircuits
 
@@ -111,9 +118,8 @@ def prepareSpecialHadamardTestCircuits(paulis, controlledFixedAnsatzCircuit, lab
                                 qubits + 2, specHadamardTest)
         specialHadamardCircuits.append(circ)
 
-    with contextlib.redirect_stdout(io.StringIO()):
-        transpiledSpecialHadamardCircuits = transpile(
-            specialHadamardCircuits, backend=backend, optimization_level=1
+    transpiledSpecialHadamardCircuits = transpile(
+            specialHadamardCircuits, backend=backend
         )
     return transpiledSpecialHadamardCircuits
 
@@ -124,8 +130,7 @@ def getSolutionVector(circ: QuantumCircuit, qubits: int, outF: list):
 
     backend = Aer.get_backend("aer_simulator")
 
-    with contextlib.redirect_stdout(io.StringIO()):
-        t_circ = transpile(circ, backend)
+    t_circ = transpile(circ, backend)
     job = backend.run(t_circ)
 
     result = job.result()
@@ -171,8 +176,7 @@ def specialHadamardTest(
     circ.barrier()
 
     circ.append(
-        controlledFixedAnsatzCircuit, range(
-            controlledFixedAnsatzCircuit.num_qubits)
+        controlledFixedAnsatzCircuit, range(controlledFixedAnsatzCircuit.num_qubits)
     )
 
     circ.barrier()
@@ -187,8 +191,7 @@ def specialHadamardTest(
 
     circ.barrier()
 
-    circ.append(controlLabelVectorCircuit, range(
-        controlLabelVectorCircuit.num_qubits))
+    circ.append(controlLabelVectorCircuit, range(controlLabelVectorCircuit.num_qubits))
 
     circ.barrier()
 

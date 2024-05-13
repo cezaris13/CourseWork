@@ -27,6 +27,7 @@ class VQLSSVM:
         threads: int = 1,
         circuitConstructionThreading: bool = False,
         jobs: int = 1,
+        options: dict = {},
         verbose: bool = False,
     ) -> (np.array, float):
         self.xTrain = xTrain
@@ -59,6 +60,7 @@ class VQLSSVM:
             threads=threads,
             jobs= jobs,
             verbose=verbose,
+            options=options,
             threadingForCircuits=circuitConstructionThreading,
         )
         if verbose:

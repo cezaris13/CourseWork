@@ -58,8 +58,11 @@ def prepareDataset(
 ) -> (np.ndarray, np.ndarray, np.array, np.array):
     if dataset == "iris":
         X, y = datasets.load_iris(return_X_y=True)
-        X = X[y != classToFilterOut]
-        y = y[y != classToFilterOut]
+        #generate random number from 0 to 2
+        randomClass = np.random.randint(0, 3)
+        y: np.array = np.where(y == randomClass, 1, -1)  # might cause some problems in a future
+        # X = X[y != classToFilterOut]
+        # y = y[y != classToFilterOut]
     elif dataset == "breastCancer":
         X, y = datasets.load_breast_cancer(return_X_y=True)
     elif dataset == "dummyData":
@@ -72,7 +75,7 @@ def prepareDataset(
         X, y = datasets.load_wine(return_X_y=True)  # 3 classes; filter out some class
     else:
         raise ValueError("Dataset not yet implemented")
-    y: np.array = np.where(y == 0, -1, 1)  # might cause some problems in a future
+    # y: np.array = np.where(y == 0, -1, 1)  # might cause some problems in a future
 
     if normalizeValues:  # normalize values returns nan with digits dataset
         max = np.max(X, axis=0)
