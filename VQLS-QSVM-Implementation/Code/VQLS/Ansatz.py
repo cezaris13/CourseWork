@@ -9,9 +9,7 @@ def fixedAnsatz(
     offset: int = 0,
     layers: int = 3,
     barrier: bool = False,
-):  # maybe change to 2local or EfficientSU2
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
+):
     gates = getFixedAnsatzGates(qubits, parameters, offset=offset, layers=layers)
     gatesToCircuit(circ, gates, barrier=barrier)
 
@@ -27,7 +25,7 @@ def controlledFixedAnsatz(
     gatesToCircuit(circ, gates, barrier=barrier)
 
 
-def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):# add type
+def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):
     lastGate: str = ""
     for i in range(len(gateList)):
         if lastGate != gateList[i][0] and barrier:
@@ -55,9 +53,7 @@ def gatesToCircuit(circuit: QuantumCircuit, gateList, barrier: bool = False):# a
 
 def getFixedAnsatzGates(
     qubits: int, parameters: List[List[float]], offset: int = 0, layers: int = 3
-):  # maybe change to 2local or EfficientSU2
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.TwoLocal.html
-    # https://qiskit.org/documentation/stubs/qiskit.circuit.library.EfficientSU2.html
+):
     if qubits < 3:
         raise Exception("Qubits must be at least 3")
 
