@@ -2,6 +2,7 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp, PauliList
 from ThirdParty.TensorizedPauliDecomposition import PauliDecomposition
 from typing import List
+from numpy import ndarray
 
 
 def convertMatrixIntoCircuit(
@@ -23,7 +24,6 @@ def convertMatrixIntoCircuit(
     for p in range(len(paulis)):
         for i in range(len(paulis[p])):
             currentGate = paulis[p][i]
-            # currentGate = paulis[p][len(paulis[p])-1-i]
             if currentGate.x and currentGate.z == False:
                 if controlled:
                     circuit.cx(auxiliaryQubit, qubitIndexList[i])
@@ -43,23 +43,14 @@ def convertMatrixIntoCircuit(
             circuit.barrier()
 
 
-def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
-    coeffs: List[float] = []
-    paulis: PauliList = pauliOp.paulis
-    for p in range(len(paulis)):
-        containsIdentity: bool = False
-        for i in range(len(paulis[p])):
-            currentGate = paulis[p][i]
-            # currentGate = paulis[p][len(paulis[p]) - 1 - i]
-            if currentGate.x == False and currentGate.z == False:
-                containsIdentity = True
-        coeffs.append(pauliOp.coeffs[p])
-        if containsIdentity == False:
-            coeffs.append(pauliOp.coeffs[p])
-    return coeffs
+def getLCU(inputMatrix: ndarray, method: str = "TPD") -> (PauliList, List[float]):
+    '''
+    Given input matrix and the method, get PauliList and coefficients whichs make up the matrix
 
+    inputMatrix - the LSSVM matrix which to decompose to Pauli matrices.
 
-def getLCU(inputMatrix, method: str = "TPD") -> (PauliList, List[float]):
+    method - TPD, sparsePauliOp, method for Pauli decomposition.
+    '''
     if method == "TPD":
         paulis, coefficientSet = PauliDecomposition(inputMatrix, sparse=True)
         pauliOp = SparsePauliOp(paulis, coefficientSet)
@@ -70,3 +61,17 @@ def getLCU(inputMatrix, method: str = "TPD") -> (PauliList, List[float]):
     paulis: PauliList = pauliOp.paulis
     coefficientSet: List[float] = getMatrixCoeffitients(pauliOp)
     return paulis, coefficientSet
+
+def getMatrixCoeffitients(pauliOp: SparsePauliOp) -> List[float]:
+    coeffs: List[float] = []
+    paulis: PauliList = pauliOp.paulis
+    for p in range(len(paulis)):
+        containsIdentity: bool = False
+        for i in range(len(paulis[p])):
+            currentGate = paulis[p][i]
+            if currentGate.x == False and currentGate.z == False:
+                containsIdentity = True
+        coeffs.append(pauliOp.coeffs[p])
+        if containsIdentity == False:
+            coeffs.append(pauliOp.coeffs[p])
+    return coeffs

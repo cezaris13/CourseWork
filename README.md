@@ -17,12 +17,15 @@
     $$\langle \Phi | \Phi \rangle \ = \ \displaystyle\sum_{m} \displaystyle\sum_{n} c_m^{*} c_n \langle 0 | V(k)^{\dagger} A_m^{\dagger} A_n V(k) |0\rangle$$
 
 1. Calculate cost function using
+
     $$\hat{C}_P \ =  1 \ - \ \frac{|\langle b | \Phi \rangle|^2}{\langle \Phi | \Phi \rangle}$$
 1. Apply minimization function (COBYLA, etc.) to modify $\alpha$ values, for the ansatz gate.
 
 1. When $\alpha_{min}$ is retrieved apply once more to ansatz circuit to retrieve normalized estimated solution vector.
 
 1. Apply post processing to the normalized estimated solution vector to retrieve estimated vector.
+
+More details of how the VQLS algorithm works can be found [here](/VQLS-QSVM-Implementation/CodeExamples/VQLS.ipynb).
 
 ### SimulationTests folder
 
@@ -33,7 +36,6 @@ All of these test results have been used in the bachelor thesis.
 - [VQLSOptimizersTest](./VQLS-QSVM-Implementation/SimulationTests/VQLSOptimizersTest.ipynb)
     Ran tests for qubit size up to 5 qubits with different non gradient and gradient optimizers (COBYLA,SLSQP, BFGS, L-BFGS-B,trust-constr)
 - [VQLSSVMTest](/VQLS-QSVM-Implementation/SimulationTests/VQLSSVMTest.ipynb)
-
-### VQLS-QSVM-Implementation
-
-The folder which contains the implementation of VQLS and VQLS-SVM algorithm.
+    Testing VQLS-SVM algorithm with qubits up to 5, with iris and breast cancer datasets.
+- [ThreadsVQLS](/VQLS-QSVM-Implementation/SimulationTests/ThreadsVQLS.ipynb)
+    Notebook used to test verious job size and thead combinations to find which option is the fastest
