@@ -5,7 +5,8 @@
   Jupyter notebook to learn the Support vector machines algotithm
 - VQLS-QSVM-Implementation
   Implementation of https://arxiv.org/pdf/2309.07770 article. Added generalization for the $n$ qubits and some solution vector post processing.
-
+- Bakalaurinis_darbas.pdf
+    - Contains the bachelor thesis(in lithuanian) where the VQLS-SVM algorithm is explored and experiment results can be seen.
 
 #### VQLS-SVM algorithm
 1. Take training data and prepare it to be [LS-SVM](https://en.wikipedia.org/wiki/Least-squares_support_vector_machine#:~:text=Elimination%20of,quadratic%20programming%20problem%3A) matrix form

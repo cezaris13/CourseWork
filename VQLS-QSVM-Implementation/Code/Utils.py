@@ -141,7 +141,7 @@ class TriangleMatrix:
         if array is not None:
             if len(array) == int(length * (length + 1) / 2):
                 self.array = array
-            else: 
+            else:
                 raise Exception("Invalid array length")
         else:
             self.array = np.zeros(int(length * (length + 1) / 2))
@@ -171,13 +171,8 @@ class TriangleMatrix:
 
 
 def prepareBackend(threads: int, jobs: int):
-    # exc = ThreadPoolExecutor(max_workers=threads)
     backend = Aer.get_backend("aer_simulator")
 
-    # if threads != 1:
-    #     backend.set_options(executor=exc,
-    #                         max_job_size=jobs)
-        
     if threads != 1:
         backend.set_options(
             max_parallel_threads=threads,
