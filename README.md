@@ -11,6 +11,7 @@
 #### VQLS-SVM algorithm
 1. Take training data and prepare it to be [LS-SVM](https://en.wikipedia.org/wiki/Least-squares_support_vector_machine#:~:text=Elimination%20of,quadratic%20programming%20problem%3A) matrix form
 1. Convert LS-SVM matrix into all combinations of
+ 
     $$|\langle b | \Phi \rangle|^2 \ = \ \displaystyle\sum_{m} \displaystyle\sum_{n} c_m c_n \langle 0 | U^{\dagger} A_n V(k) | 0 \rangle \langle 0 | U^{\dagger} A_m V(k) | 0 \rangle$$
 
     and
